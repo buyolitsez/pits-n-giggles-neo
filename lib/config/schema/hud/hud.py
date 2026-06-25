@@ -308,6 +308,20 @@ class HudSettings(ConfigDiffMixin, BaseModel):
 
     # ============== HUD OVERLAY ==============
     show_hud_overlay: bool = overlay_enable_field(description="Enable HUD overlay", group="HUD Overlay")
+    show_hud_suggested_gear: bool = Field(
+        default=True,
+        description="Show suggested gear on HUD overlay",
+        json_schema_extra={
+            "ui": {
+                "type": "check_box",
+                "visible": True,
+                "group": "HUD Overlay",
+                "ext_info": [
+                    "Requires the game to send suggested gear telemetry. In F1 games this usually needs Manual & Suggested Gear enabled."
+                ],
+            }
+        }
+    )
     hud_overlay_toggle_udp_action_code: Optional[int] = udp_action_field(
         description="Toggle HUD overlay UDP action code", group="HUD Overlay")
 

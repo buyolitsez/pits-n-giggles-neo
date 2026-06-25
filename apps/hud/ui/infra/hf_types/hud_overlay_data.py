@@ -60,6 +60,7 @@ class HudOverlayData(HighFreqBase):
     rev_lights_pct: int
     rpm: int
     gear: int
+    suggested_gear: int | None
     speed_kmph: int
     drs_enabled: bool
     drs_available: bool
@@ -88,6 +89,7 @@ class HudOverlayData(HighFreqBase):
             self.rev_lights_pct,
             self.rpm,
             self.gear,
+            self.suggested_gear,
             self.speed_kmph,
             self.drs_enabled,
             self.drs_available,
@@ -117,6 +119,7 @@ class HudOverlayData(HighFreqBase):
             rev_lights_pct=hud_data["rev-lights"],
             rpm=hud_data["rpm"],
             gear=hud_data["gear"],
+            suggested_gear=hud_data["suggested-gear"],
             speed_kmph=hud_data["speed-kmph"],
             drs_enabled=hud_data["drs-enabled"],
             drs_available=hud_data["drs-available"],

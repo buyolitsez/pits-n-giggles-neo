@@ -43,6 +43,7 @@ Window {
     property int    revLightsPct:   0
     property int    rpm:            0
     property int    gear:           0
+    property int    suggestedGear:  0
     property int    speedKmph:      0
     property string speedUnitLabel: "km/h"
     property string drsText:        "DRS"
@@ -330,6 +331,30 @@ Window {
                             font.pixelSize:  42
                             font.bold:       true
                             color:           "#edf7ff"
+                        }
+
+                        Rectangle {
+                            id: suggestedGearBadge
+                            visible: root.suggestedGear > 0
+                            width:   26
+                            height:  22
+                            radius:  6
+                            anchors.right:       parent.right
+                            anchors.top:         parent.top
+                            anchors.rightMargin: -2
+                            anchors.topMargin:   -2
+                            color:        Qt.rgba(1.00, 0.79, 0.32, 0.16)
+                            border.width: 1
+                            border.color: "#ffca52"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text:            root.suggestedGear.toString()
+                                font.family:     "Formula1"
+                                font.pixelSize:  13
+                                font.bold:       true
+                                color:           "#ffca52"
+                            }
                         }
                     }
                 }

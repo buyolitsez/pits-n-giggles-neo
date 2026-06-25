@@ -315,6 +315,7 @@ class SessionState:
         'm_fastest_s1_ms',
         'm_fastest_s2_ms',
         'm_fastest_s3_ms',
+        'm_suggested_gear',
         'm_time_trial_packet',
         'm_overtakes_history',
         'm_session_info',
@@ -357,6 +358,7 @@ class SessionState:
         self.m_fastest_s1_ms: Optional[int] = None
         self.m_fastest_s2_ms: Optional[int] = None
         self.m_fastest_s3_ms: Optional[int] = None
+        self.m_suggested_gear: Optional[int] = None
         self.m_time_trial_packet : Optional[PacketTimeTrialData] = None
         self.m_overtakes_history = OvertakesHistory()
         self.m_session_info: SessionInfo = SessionInfo(settings, logger)
@@ -396,6 +398,7 @@ class SessionState:
         self.m_fastest_s1_ms = None
         self.m_fastest_s2_ms = None
         self.m_fastest_s3_ms = None
+        self.m_suggested_gear = None
         self.m_overtakes_history.clear()
         self.m_first_session_update_received = False
         self.m_session_info.clear()
@@ -660,6 +663,8 @@ class SessionState:
         Args:
             packet (PacketCarTelemetryData): Car telemetry update packet
         """
+
+        self.m_suggested_gear = packet.m_suggestedGear
 
         for index, car_telemetry_data in enumerate(packet.m_carTelemetryData):
             obj_to_be_updated = self._getObjectByIndex(index, reason='Car Telemetry update')

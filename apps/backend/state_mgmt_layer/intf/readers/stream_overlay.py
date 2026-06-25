@@ -65,6 +65,7 @@ class StreamOverlayData(BaseAPI):
         self.m_formula_type             = session_state.m_session_info.m_formula
         self.m_session_type             = session_state.m_session_info.m_session_type
         self.m_pit_speed_limit          = session_state.m_session_info.m_pit_speed_limit
+        self.m_suggested_gear           = session_state.m_suggested_gear
 
         self.m_next_pit_window          = session_state.m_ideal_pit_stop_window
         self.m_fastest_lap_ms           = \
@@ -308,6 +309,7 @@ class StreamOverlayData(BaseAPI):
             "rev-lights" : None,
             "rpm" : None,
             "gear" : None,
+            "suggested-gear" : None,
             "speed-kmph" : None,
             "drs-enabled" : None,
             "drs-available" : None,
@@ -362,6 +364,7 @@ class StreamOverlayData(BaseAPI):
             "rev-lights" : car_telemetry.m_revLightsPercent,
             "rpm" : car_telemetry.m_engineRPM,
             "gear" : car_telemetry.m_gear,
+            "suggested-gear" : self.m_suggested_gear,
             "speed-kmph" : car_telemetry.m_speed,
             "drs-enabled" : car_telemetry.m_drs,
             "drs-available" : car_status.m_drsAllowed,

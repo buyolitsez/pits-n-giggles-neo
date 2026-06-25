@@ -143,6 +143,7 @@ class OverlaysMgr:
             refresh_interval_ms=settings.Display.realtime_overlay_update_interval_ms,
             speed_unit=settings.HUD.overlays_speed_unit,
             fuel_estimation_mode=settings.HUD.overlays_fuel_estimation_mode,
+            show_suggested_gear=settings.HUD.show_hud_suggested_gear,
         )
 
         self._register_overlay_if_enabled(

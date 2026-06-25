@@ -85,6 +85,7 @@ class TestHudSettings(TestF1ConfigBase):
         self.assertEqual(settings.track_radar_overlay_toggle_udp_action_code, None)
         self.assertEqual(settings.track_radar_idle_opacity, 30)
         self.assertEqual(settings.show_hud_overlay, True)
+        self.assertEqual(settings.show_hud_suggested_gear, True)
         self.assertEqual(settings.overlays_speed_unit, OverlaysSpeedUnit.KMPH)
         self.assertTrue(settings.hud_overlay_speed_unit_kmph)
         self.assertFalse(settings.hud_overlay_speed_unit_mph)
@@ -945,6 +946,18 @@ class TestHudSettings(TestF1ConfigBase):
             HudSettings(show_pu_info="invalid")
         with self.assertRaises(ValidationError):
             HudSettings(show_pu_info=420)
+
+    def test_show_hud_suggested_gear_validation(self):
+        """Test show_hud_suggested_gear accepts booleans and rejects invalid types"""
+        self.assertTrue(HudSettings(show_hud_suggested_gear=True).show_hud_suggested_gear)
+        self.assertFalse(HudSettings(show_hud_suggested_gear=False).show_hud_suggested_gear)
+
+        with self.assertRaises(ValidationError):
+            HudSettings(show_hud_suggested_gear=None)  # type: ignore
+        with self.assertRaises(ValidationError):
+            HudSettings(show_hud_suggested_gear="invalid")
+        with self.assertRaises(ValidationError):
+            HudSettings(show_hud_suggested_gear=420)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

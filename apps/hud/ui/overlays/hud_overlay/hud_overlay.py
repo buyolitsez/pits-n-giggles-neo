@@ -58,6 +58,7 @@ class HudOverlay(BaseOverlayQML):
         refresh_interval_ms: Optional[int] = None,
         speed_unit: OverlaysSpeedUnit = OverlaysSpeedUnit.KMPH,
         fuel_estimation_mode: OverlaysFuelEstimationMode = OverlaysFuelEstimationMode.LINEAR_REGRESSION,
+        show_suggested_gear: bool = True,
     ) -> None:
 
         super().__init__(
@@ -71,6 +72,7 @@ class HudOverlay(BaseOverlayQML):
         )
 
         self._speed_unit = speed_unit
+        self._show_suggested_gear = show_suggested_gear
         self.subscribe_hf(HudOverlayData)
 
         self._surplus_fuel: Optional[float] = None
@@ -99,6 +101,8 @@ class HudOverlay(BaseOverlayQML):
         self.set_qml_property("revLightsPct", data.rev_lights_pct)
         self.set_qml_property("rpm",          data.rpm)
         self.set_qml_property("gear",         data.gear)
+        suggested_gear = (data.suggested_gear or 0) if self._show_suggested_gear else 0
+        self.set_qml_property("suggestedGear", suggested_gear)
         if self._speed_unit == OverlaysSpeedUnit.MPH:
             self.set_qml_property("speedKmph",    data.speed_mph)
             self.set_qml_property("speedUnitLabel", "mph")

@@ -475,6 +475,7 @@ class HudAppMgr(PngAppMgrBase):
                 "input_overlay_buffer_duration_sec",
                 "show_input_overlay",
                 "show_hud_overlay",
+                "show_hud_suggested_gear",
                 "overlays_fuel_estimation_mode",
                 "show_circuit_info",
                 "show_pu_info",
