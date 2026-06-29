@@ -118,18 +118,24 @@ poetry run python -m apps.mcp_server --managed --debug 2>&1 | tee mcp_http.log
 2. Under **Tools**, you will see all registered tools:
    - `get_session_info`
    - `get_race_table`
+   - `get_race_engineer_brief`
    - `get_drivers_list`
    - `get_driver_lap_times`
    - `get_session_events_for_driver`
    - `get_player_driver_info`
+   - `get_player_fuel_info`
+   - `get_fuel_info`
+   - `get_player_tyre_wear`
+   - `get_tyre_wear`
    - `get_car_damage`
 3. Tools that require a live session return `"available": false` when no telemetry is active. This is expected — no errors will be shown.
-4. Tools that hit the core backend (`get_driver_lap_times`, `get_session_events_for_driver`, `get_car_damage`) additionally call the backend REST API on `localhost:<server_port>`. These return `"ok": false` with an appropriate error if the backend is not running.
+4. Tools that need detailed per-driver history (`get_driver_lap_times`, `get_session_events_for_driver`, `get_car_damage`) additionally query the backend over the internal IPC dealer route. These return `"ok": false` with an appropriate error if the backend is not running.
+5. `get_race_engineer_brief` can be focused by category, including `pace`, `tyres`, `fuel`, `ers`, `damage`, `weather`, `strategy`, `race_control`, and `driving_coach`. Use `focus="driving_coach"` to ask for the latest trace-based braking/throttle/coasting advice captured from `race-engineer-trace-update`, `focus="weather"` for rain, drying, and track-temperature calls, or `focus="strategy"` for pit-window tyre calls that can include the recommended next compound when tyre-set evidence is available. The response also includes `agent_context`, a compact per-category workspace with current facts, missing evidence, advisor order, and review status for Codex CLI. Trace advice is cleared when the trace session changes, ignored when its session UID does not match the current race table, overwritten by clean completed laps, and ignored after it becomes stale, so old coaching is not reused.
 
 ## Architecture notes
 
 - **`mcp_main.py`** — entry point; parses args, selects transport (`stdio` when unmanaged, `http` when `--managed`).
 - **`mcp_server/mcp_server.py`** — `MCPBridge`: owns the `FastMCP` instance, registers tools, runs the server loop.
-- **`mcp_server/tools/`** — one file per tool; pure functions that read from `apps.mcp_server.state` or call the backend REST API.
-- **`subscriber.py`** — subscribes to the ZeroMQ broker and feeds live telemetry into the shared state store.
+- **`mcp_server/tools/`** — one file per tool; pure functions that read from `apps.mcp_server.state` or query the backend through IPC where detailed history is needed.
+- **`subscriber.py`** — subscribes to the ZeroMQ broker and feeds live telemetry into the shared state store, including trace-derived race engineer driving coach advice.
 - **`state.py`** — in-process key/value store for telemetry snapshots published by the subscriber.

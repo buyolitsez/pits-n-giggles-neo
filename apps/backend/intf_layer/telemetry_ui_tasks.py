@@ -29,11 +29,17 @@ from typing import Any, Awaitable, Callable, List, Tuple
 
 from apps.backend.state_mgmt_layer import SessionState
 from apps.backend.state_mgmt_layer.intf import (PeriodicUpdateData,
+                                                RaceEngineerTraceData,
                                                 StreamOverlayData)
 from apps.backend.telemetry_layer import F1TelemetryHandler
 from lib.config import PngSettings
 from lib.inter_task_communicator import AsyncInterTaskCommunicator
 from lib.ipc import IpcDealerAsync, IpcPublisherAsync, PngAppId
+from lib.race_engineer.control import (
+    RACE_ENGINEER_CONTROL_TOPIC,
+    RACE_ENGINEER_PTT_CONTROL_TOPIC,
+    forward_race_engineer_control_messages,
+)
 from lib.web_server import ClientType
 
 from .ipc import registerIpcTask
@@ -139,6 +145,12 @@ def initUiIntfLayer(
                                      name="Front End Message Task"))
     tasks.append(asyncio.create_task(hudInteractionTask(dealer, shutdown_event),
                                      name="HUD Interaction Task"))
+    tasks.append(asyncio.create_task(
+        raceEngineerControlTask(ipc_pub, shutdown_event, RACE_ENGINEER_CONTROL_TOPIC),
+        name="Race Engineer Control Bridge Task"))
+    tasks.append(asyncio.create_task(
+        raceEngineerControlTask(ipc_pub, shutdown_event, RACE_ENGINEER_PTT_CONTROL_TOPIC),
+        name="Race Engineer Push-to-Talk Bridge Task"))
 
     registerIpcTask(run_ipc_server, logger, session_state, telemetry_handler, ipc_pub, dealer, web_server, tasks)
     return web_server, ipc_pub, dealer
@@ -168,6 +180,8 @@ async def highFreqLocalUpdateTask(
 
     data = StreamOverlayData(session_state, export_hud_data=True, export_pu_data=True).toJSON(False)
     await ipc_pub.publish("stream-overlay-update", data)
+    trace_data = RaceEngineerTraceData(session_state).toJSON()
+    await ipc_pub.publish("race-engineer-trace-update", trace_data)
 
 async def webClientUpdateTask(
     server: TelemetryWebServer,
@@ -225,6 +239,14 @@ async def hudInteractionTask(
     while not shutdown_event.is_set():
         if message := await AsyncInterTaskCommunicator().receive("hud-notifier"):
             await dealer.fire(str(PngAppId.HUD), str(message.m_message_type), message.toJSON())
+
+async def raceEngineerControlTask(
+    ipc_pub: IpcPublisherAsync,
+    shutdown_event: asyncio.Event,
+    topic: str) -> None:
+    """Forward local race engineer control messages to the pub/sub broker."""
+
+    await forward_race_engineer_control_messages(ipc_pub, shutdown_event, topic)
 
 # -------------------------------------- UTILS -------------------------------------------------------------------------
 

@@ -25,11 +25,11 @@
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from lib.ipc import IpcSubscriberAsync
 from lib.logger import PngLogger
+from lib.race_engineer import DrivingTraceRecorder
 from lib.wdt import WatchDogTimerAsync
 
-from .state import set_state_data
+from .state import delete_state_data, set_state_data
 
 # -------------------------------------- CLASSES -----------------------------------------------------------------------
 
@@ -42,7 +42,11 @@ class McpSubscriber:
             port (int): IPC port
             timeout (float): Connection timeout in seconds
         """
+        from lib.ipc import IpcSubscriberAsync
+
         self.m_ipc_sub = IpcSubscriberAsync(port=port, logger=logger)
+        self.m_trace_recorder = DrivingTraceRecorder()
+        self.m_trace_session_uid: Optional[Any] = None
         set_state_data("connected", False)
         self.m_wdt = WatchDogTimerAsync(
             status_callback=self._wdt_callback,
@@ -68,6 +72,37 @@ class McpSubscriber:
             """Handle race table update messages."""
             set_state_data("race-table-update", msg)
             self.m_wdt.kick()
+
+        @self.m_ipc_sub.route("race-engineer-trace-update")
+        async def _handle_race_engineer_trace_update(msg: Dict[str, Any]) -> None:
+            """Handle high-frequency race engineer trace messages."""
+            set_state_data("race-engineer-trace-update", msg)
+            self._clear_stale_trace_advice_if_session_changed(msg)
+            previous_completed = self.m_trace_recorder.last_completed_lap
+            advice = self.m_trace_recorder.update_from_trace_update(msg)
+            last_completed = self.m_trace_recorder.last_completed_lap
+            if last_completed is not None and last_completed is not previous_completed:
+                set_state_data("race-engineer-driving-advice-update", {
+                    "source": "race-engineer-trace-update",
+                    "session-uid": self.m_trace_session_uid,
+                    "advice": advice,
+                    "reference-lap-count": self.m_trace_recorder.reference_lap_count,
+                    "last-completed-lap": last_completed.lap_number if last_completed else None,
+                })
+            self.m_wdt.kick()
+
+    def _clear_stale_trace_advice_if_session_changed(self, msg: Dict[str, Any]) -> None:
+        if not isinstance(msg, dict):
+            return
+        session_uid = msg.get("session-uid")
+        if not session_uid:
+            return
+        if self.m_trace_session_uid is None:
+            self.m_trace_session_uid = session_uid
+            return
+        if session_uid != self.m_trace_session_uid:
+            self.m_trace_session_uid = session_uid
+            delete_state_data("race-engineer-driving-advice-update")
 
     async def run(self) -> None:
         """Starts the IPC server."""
@@ -95,7 +130,10 @@ class McpSubscriber:
         Returns:
             dict: Stats dictionary
         """
-        return self.m_ipc_sub.get_stats()
+        return {
+            **self.m_ipc_sub.get_stats(),
+            "trace-reference-laps": self.m_trace_recorder.reference_lap_count,
+        }
 
 # -------------------------------------- FUNCTIONS ---------------------------------------------------------------------
 

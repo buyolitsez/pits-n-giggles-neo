@@ -62,6 +62,7 @@ class StreamOverlayData(BaseAPI):
         self.m_total_laps               = session_state.m_session_info.m_total_laps
         self.m_game_year                = session_state.m_session_info.m_game_year
         self.m_packet_format            = session_state.m_session_info.m_packet_format
+        self.m_session_uid              = session_state.m_session_info.m_session_uid
         self.m_formula_type             = session_state.m_session_info.m_formula
         self.m_session_type             = session_state.m_session_info.m_session_type
         self.m_pit_speed_limit          = session_state.m_session_info.m_pit_speed_limit
@@ -409,12 +410,14 @@ class StreamOverlayData(BaseAPI):
 
         ret = {
             "f1-packet-format" : self.m_packet_format,
+            "session-uid" : self.m_session_uid,
             "event-type" : str(self.m_session_type),
             "formula-type" : str(self.m_formula_type),
             "show-sample-data-at-start": stream_overlay_start_sample_data,
             "circuit-enum-name" : self.m_circuit.name if self.m_circuit else None,
             "circuit-enum-value" : self.m_circuit.value if self.m_circuit else None,
             "ref-index": self.m_ref_index,
+            "current-lap": self.m_curr_lap,
             "weather-forecast-samples": [
                 {
                     "time-offset": sample.m_timeOffset,

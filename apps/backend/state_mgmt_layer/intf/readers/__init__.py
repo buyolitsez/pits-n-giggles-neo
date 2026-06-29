@@ -25,6 +25,7 @@
 from .periodic_update_data import PeriodicUpdateData
 from .race_info import RaceInfoData
 from .driver_info import DriverInfoRsp
+from .race_engineer_trace import RaceEngineerTraceData
 from .stream_overlay import StreamOverlayData
 
 # -------------------------------------- EXPORTS -----------------------------------------------------------------------
@@ -33,6 +34,7 @@ __all__ = [
 
     "DriverInfoRsp",
     "RaceInfoData",
+    "RaceEngineerTraceData",
     "StreamOverlayData",
     "PeriodicUpdateData",
 

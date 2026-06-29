@@ -55,6 +55,8 @@ from .tools.get_player_fuel_info import (PLAYER_FUEL_INFO_OUTPUT_SCHEMA,
                                          get_player_fuel_info)
 from .tools.get_player_tyre_wear import (PLAYER_TYRE_WEAR_OUTPUT_SCHEMA,
                                          get_player_tyre_wear)
+from .tools.get_race_engineer_brief import (
+    RACE_ENGINEER_BRIEF_OUTPUT_SCHEMA, get_race_engineer_brief)
 from .tools.get_race_table import RACE_TABLE_OUTPUT_SCHEMA, get_race_table
 from .tools.get_session_events_for_driver import (
     DRIVER_SESSION_EVENTS_OUTPUT_SCHEMA, get_session_events_for_driver)
@@ -219,6 +221,55 @@ TYRE WEAR THRESHOLDS:
             rsp = get_race_table(self.logger)
             self.logger.debug("get_race_table called: available=%s", rsp.get("available", False))
             return rsp
+
+        @self._tool(
+            name="get_race_engineer_brief",
+            description=(
+                "Get a concise race engineer brief for the player or currently-spectated driver. "
+                "The brief combines the latest live snapshot into prioritized advice across pace, "
+                "tyres, fuel, ERS/DRS, damage, weather, race control, strategy, and driving coach trace. "
+                "Use focus='all' for the best overall brief, or focus one category such as "
+                "'pace', 'tyres', 'fuel', 'ers', 'damage', 'weather', 'strategy', "
+                "'race_control', or 'driving_coach'. "
+                "Each advice item includes evidence and a short voice_callout suitable for TTS. "
+                "The agent_context field gives Codex CLI a per-category workspace with current "
+                "facts, missing evidence, advisor order, and review status."
+            ),
+            title="Race Engineer Brief",
+            tags={
+                "race",
+                "engineer",
+                "brief",
+                "advice",
+                "strategy",
+                "voice",
+            },
+            output_schema=RACE_ENGINEER_BRIEF_OUTPUT_SCHEMA,
+            annotations=ToolAnnotations(
+                title="Race Engineer Brief",
+                readOnlyHint=True,
+                openWorldHint=False,
+            ),
+        )
+        async def handle_get_race_engineer_brief(
+            focus: Annotated[str, Field(
+                description=(
+                    "Advice category to focus on: all, pace, tyres, fuel, ers, "
+                    "damage, weather, strategy, race_control, or driving_coach."
+                ),
+            )] = "all",
+            max_items: Annotated[int, Field(
+                ge=1,
+                le=10,
+                description="Maximum number of advice items to return.",
+            )] = 5,
+        ) -> Dict[str, Any]:
+            self.logger.debug("get_race_engineer_brief called: focus=%s max_items=%s", focus, max_items)
+            return get_race_engineer_brief(
+                logger=self.logger,
+                focus=focus,
+                max_items=max_items,
+            )
 
         @self._tool(
             name="get_drivers_list",

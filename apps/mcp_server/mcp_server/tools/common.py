@@ -23,9 +23,11 @@
 # -------------------------------------- IMPORTS -----------------------------------------------------------------------
 
 import logging
-from typing import Any, Dict, Optional
+import time
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from lib.ipc import IpcDealerAsync, PngAppId
+if TYPE_CHECKING:
+    from lib.ipc import IpcDealerAsync
 
 from apps.mcp_server.state import get_state_data
 
@@ -45,6 +47,8 @@ _DRIVER_INFO_REQ_STATUS_SCHEMA = {
     },
 }
 
+_RACE_ENGINEER_TRACE_ADVICE_MAX_AGE_SEC = 120.0
+
 # -------------------------------------- FUNCTIONS ---------------------------------------------------------------------
 def _get_race_table_context(
     logger: logging.Logger,
@@ -57,10 +61,8 @@ def _get_race_table_context(
         base_response    (Dict)
     """
     telemetry_update_entry = get_state_data("race-table-update")
-    connected_entry = get_state_data("connected", False)
-
-    assert connected_entry is not None, "Connected state data missing"
-    connected: bool = connected_entry.data
+    connected_entry = get_state_data("connected")
+    connected = bool(connected_entry.data) if connected_entry is not None else False
 
     base_rsp: Dict[str, Any] = {
         "available": False,
@@ -73,19 +75,96 @@ def _get_race_table_context(
         logger.debug("_get_race_table_context: telemetry update entry is None")
         return None, base_rsp
 
-    telemetry_update: Dict[str, Any] = telemetry_update_entry.data
+    telemetry_update = telemetry_update_entry.data
+    base_rsp["last-update-timestamp"] = telemetry_update_entry.ts
+    if not isinstance(telemetry_update, dict):
+        logger.debug("_get_race_table_context: telemetry update entry is not a dict")
+        base_rsp["status"] = "error"
+        base_rsp["error"] = "Telemetry update is not an object."
+        return None, base_rsp
 
     session_uid = telemetry_update.get("session-uid")
     if not session_uid:
         logger.debug("_get_race_table_context: session UID missing")
         return None, base_rsp
 
-    base_rsp["last-update-timestamp"] = telemetry_update_entry.ts
     base_rsp["available"] = True
     return telemetry_update, base_rsp
 
+
+def _get_race_engineer_trace_advice_context(
+    logger: logging.Logger,
+    current_session_uid: Optional[Any] = None,
+) -> tuple[list[Dict[str, Any]], Dict[str, Any]]:
+    """Return the latest driving coach advice produced from race-engineer trace samples."""
+
+    trace_advice_entry = get_state_data("race-engineer-driving-advice-update")
+    trace_context: Dict[str, Any] = {
+        "available": False,
+        "source": None,
+        "session_uid": None,
+        "session_mismatch": False,
+        "last_update_timestamp": None,
+        "age_seconds": None,
+        "stale": False,
+        "invalid_payload": False,
+        "reference_lap_count": None,
+        "last_completed_lap": None,
+    }
+    if trace_advice_entry is None:
+        return [], trace_context
+
+    payload = trace_advice_entry.data
+    if not isinstance(payload, dict):
+        trace_context.update({
+            "last_update_timestamp": trace_advice_entry.ts,
+            "age_seconds": max(0.0, time.time() - trace_advice_entry.ts),
+            "invalid_payload": True,
+        })
+        logger.debug("_get_race_engineer_trace_advice_context: payload is not a dict")
+        return [], trace_context
+
+    age_seconds = max(0.0, time.time() - trace_advice_entry.ts)
+    is_stale = age_seconds > _RACE_ENGINEER_TRACE_ADVICE_MAX_AGE_SEC
+    trace_session_uid = payload.get("session-uid")
+    session_mismatch = (
+        current_session_uid not in (None, "")
+        and trace_session_uid not in (None, "")
+        and str(current_session_uid) != str(trace_session_uid)
+    )
+
+    trace_context.update({
+        "available": True,
+        "source": payload.get("source"),
+        "session_uid": trace_session_uid,
+        "session_mismatch": session_mismatch,
+        "last_update_timestamp": trace_advice_entry.ts,
+        "age_seconds": age_seconds,
+        "stale": is_stale,
+        "reference_lap_count": payload.get("reference-lap-count"),
+        "last_completed_lap": payload.get("last-completed-lap"),
+    })
+    if is_stale:
+        trace_context["available"] = False
+        logger.debug("_get_race_engineer_trace_advice_context: advice is stale")
+        return [], trace_context
+    if session_mismatch:
+        trace_context["available"] = False
+        logger.debug("_get_race_engineer_trace_advice_context: session UID mismatch")
+        return [], trace_context
+
+    advice = payload.get("advice")
+    if not isinstance(advice, list):
+        trace_context["available"] = False
+        trace_context["invalid_payload"] = True
+        logger.debug("_get_race_engineer_trace_advice_context: advice is not a list")
+        return [], trace_context
+
+    return [item for item in advice if isinstance(item, dict)], trace_context
+
+
 async def fetch_driver_info(
-        dealer: IpcDealerAsync,
+        dealer: "IpcDealerAsync",
         logger: logging.Logger,
         driver_index: int,
 ) -> Dict[str, Any]:
@@ -95,6 +174,7 @@ async def fetch_driver_info(
     Never raises.
     Centralizes all transport and backend errors.
     """
+    from lib.ipc import PngAppId
 
     reply = await dealer.send(
         str(PngAppId.BACKEND),

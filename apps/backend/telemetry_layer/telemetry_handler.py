@@ -30,6 +30,8 @@ from datetime import datetime
 from typing import (Any, Awaitable, Callable, Coroutine, Dict, List, Optional,
                     Tuple)
 
+from pydantic import BaseModel
+
 from apps.backend.state_mgmt_layer import SessionState
 from apps.backend.state_mgmt_layer.intf import ManualSaveRsp
 from lib.button_debouncer import ButtonDebouncer
@@ -50,6 +52,20 @@ from lib.inter_task_communicator import (
     TyreDeltaNotificationMessageCollection)
 from lib.logger import PngLogger
 from lib.packet_forwarder import AsyncUDPForwarder
+from lib.race_engineer.control import (
+    RACE_ENGINEER_CONTROL_TOPIC,
+    RACE_ENGINEER_PTT_CONTROL_TOPIC,
+    RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD,
+    RACE_ENGINEER_TOGGLE_ACTION_FIELD,
+    UdpHoldActionTracker,
+    race_engineer_push_to_talk_message,
+    race_engineer_toggle_message,
+)
+from lib.race_engineer.launch_profile import (
+    RaceEngineerLaunchProfile,
+    load_race_engineer_launch_profile,
+    race_engineer_profile_udp_action_code,
+)
 from lib.save_to_disk import save_json_to_file
 from lib.telemetry_manager import (AsyncF1TelemetryManager,
                                    telemetry_transport_factory)
@@ -73,6 +89,8 @@ class UdpActionCodes:
     toggle_hud_overlay: Optional[int] = None
     toggle_circuit_info_overlay: Optional[int] = None
     toggle_pu_overlay: Optional[int] = None
+    race_engineer_toggle: Optional[int] = None
+    race_engineer_push_to_talk: Optional[int] = None
 
     _MAP = {
         "udp_tyre_delta_action_code": "tyre_delta",
@@ -89,6 +107,8 @@ class UdpActionCodes:
         "hud_overlay_toggle_udp_action_code": "toggle_hud_overlay",
         "circuit_info_toggle_udp_action_code": "toggle_circuit_info_overlay",
         "pu_toggle_udp_action_code": "toggle_pu_overlay",
+        RACE_ENGINEER_TOGGLE_ACTION_FIELD: "race_engineer_toggle",
+        RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD: "race_engineer_push_to_talk",
     }
 
     def update(self, key: str, value: int):
@@ -136,6 +156,52 @@ def setupTelemetryTask(
 
     return telemetry_server
 
+def _get_optional_settings_value(settings: PngSettings, section_name: str, field_name: str) -> Optional[int]:
+    """Read a future optional settings value without requiring that config section yet."""
+    section = getattr(settings, section_name, None)
+    value = getattr(section, field_name, None)
+    return value if isinstance(value, int) else None
+
+def _load_race_engineer_launch_profile(logger: PngLogger) -> RaceEngineerLaunchProfile:
+    try:
+        return load_race_engineer_launch_profile()
+    except (OSError, ValueError) as exc:
+        logger.warning("Failed to load race engineer launch profile: %s", exc)
+        return RaceEngineerLaunchProfile()
+
+def _get_profile_udp_action_code(
+        settings: PngSettings,
+        logger: PngLogger,
+        profile: RaceEngineerLaunchProfile,
+        field_name: str) -> Optional[int]:
+    value = getattr(profile, field_name, None)
+    if value is None:
+        return None
+
+    existing = _collect_configured_udp_action_codes(settings)
+    if race_engineer_profile_udp_action_code(profile, field_name, existing_codes=existing) is None:
+        logger.warning(
+            "Ignoring race engineer UDP action code %s=%s because it conflicts with %s",
+            field_name,
+            value,
+            existing.get(value),
+        )
+        return None
+    return value
+
+def _collect_configured_udp_action_codes(settings: PngSettings) -> Dict[int, str]:
+    result: Dict[int, str] = {}
+    for section_name, section in settings.__dict__.items():
+        if not isinstance(section, BaseModel):
+            continue
+        for field_name, field in type(section).model_fields.items():
+            if not (field.json_schema_extra or {}).get("udp_action_code"):
+                continue
+            value = getattr(section, field_name)
+            if isinstance(value, int):
+                result[value] = f"{section_name}.{field_name}"
+    return result
+
 # -------------------------------------- TELEMETRY PACKET HANDLERS -----------------------------------------------------
 
 class F1TelemetryHandler:
@@ -182,9 +248,11 @@ class F1TelemetryHandler:
         self.m_data_cleared_this_session: bool = False
         self.m_final_classification_processed: bool = False
         self.m_capture_settings: CaptureSettings = settings.Capture
+        race_engineer_profile = _load_race_engineer_launch_profile(logger)
         self.m_button_debouncer: ButtonDebouncer = ButtonDebouncer(
             debounce_time=settings.Network.udp_action_debounce_sec)
         self.m_udp_action_stats: EventCounter = EventCounter()
+        self.m_udp_hold_action_tracker = UdpHoldActionTracker()
 
         self.m_should_forward: bool = bool(settings.Forwarding.forwarding_targets)
         self.m_udp_forwarder: Optional[AsyncUDPForwarder] = None
@@ -213,6 +281,22 @@ class F1TelemetryHandler:
             toggle_hud_overlay=settings.HUD.hud_overlay_toggle_udp_action_code,
             toggle_circuit_info_overlay=settings.HUD.circuit_info_toggle_udp_action_code,
             toggle_pu_overlay=settings.HUD.pu_toggle_udp_action_code,
+            race_engineer_toggle=_get_optional_settings_value(
+                settings, "RaceEngineer", RACE_ENGINEER_TOGGLE_ACTION_FIELD)
+                or _get_profile_udp_action_code(
+                    settings,
+                    logger,
+                    race_engineer_profile,
+                    "race_engineer_toggle_udp_action_code",
+                ),
+            race_engineer_push_to_talk=_get_optional_settings_value(
+                settings, "RaceEngineer", RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD)
+                or _get_profile_udp_action_code(
+                    settings,
+                    logger,
+                    race_engineer_profile,
+                    "race_engineer_push_to_talk_udp_action_code",
+                ),
         )
 
         self.m_manager_task: Optional[asyncio.Task] = None
@@ -660,6 +744,18 @@ class F1TelemetryHandler:
                                     'Toggle PU overlay',
                                     lambda: self._processToggleHud(OverlayId.PU))
 
+            await self._handle_udp_action(buttons,
+                                    self.m_udp_action_codes.race_engineer_toggle,
+                                    'Toggle race engineer',
+                                    self._processRaceEngineerToggle)
+
+            await self._handle_udp_hold_action(buttons,
+                                    self.m_udp_action_codes.race_engineer_push_to_talk,
+                                    'Race engineer push-to-talk',
+                                    'race_engineer_push_to_talk',
+                                    self._processRaceEngineerPushToTalkStart,
+                                    self._processRaceEngineerPushToTalkStop)
+
         async def handleFlashBackEvent(packet: PacketEventData) -> None:
             """
             Handle and process the flashback event
@@ -838,6 +934,16 @@ class F1TelemetryHandler:
             and self.m_button_debouncer.onButtonPress(action_code)
         )
 
+    def _isUdpActionActive(self,
+                           buttons_event: PacketEventData.Buttons,
+                           action_code: Optional[int]
+                           ) -> bool:
+        """Check if a UDP action button is currently held down."""
+        return (
+            action_code is not None
+            and buttons_event.isUDPActionPressed(action_code)
+        )
+
     async def _processCustomMarkerCreate(self) -> None:
         """Update the data structures with custom marker information
         """
@@ -902,9 +1008,30 @@ class F1TelemetryHandler:
             )
         )
 
+    async def _processRaceEngineerToggle(self) -> None:
+        """Toggle race engineer callouts through the local pub/sub bridge."""
+        await AsyncInterTaskCommunicator().send(
+            RACE_ENGINEER_CONTROL_TOPIC,
+            race_engineer_toggle_message(source="udp_action"),
+        )
+
+    async def _processRaceEngineerPushToTalkStart(self) -> None:
+        """Start race engineer push-to-talk recording through the local pub/sub bridge."""
+        await AsyncInterTaskCommunicator().send(
+            RACE_ENGINEER_PTT_CONTROL_TOPIC,
+            race_engineer_push_to_talk_message("start", source="udp_action"),
+        )
+
+    async def _processRaceEngineerPushToTalkStop(self) -> None:
+        """Stop race engineer push-to-talk recording through the local pub/sub bridge."""
+        await AsyncInterTaskCommunicator().send(
+            RACE_ENGINEER_PTT_CONTROL_TOPIC,
+            race_engineer_push_to_talk_message("stop", source="udp_action"),
+        )
+
     async def _handle_udp_action(self,
                                  buttons: PacketEventData.Buttons,
-                                 code: int,
+                                 code: Optional[int],
                                  name: str,
                                  coro: Callable[[], Awaitable[None]]) -> None:
         """Handle a UDP action.
@@ -919,6 +1046,29 @@ class F1TelemetryHandler:
             self.m_udp_action_stats.track_event('__UDP_ACTIONS__', name)
             self.m_logger.silent('UDP action %d pressed - %s', code, name)
             await coro()
+
+    async def _handle_udp_hold_action(self,
+                                      buttons: PacketEventData.Buttons,
+                                      code: Optional[int],
+                                      name: str,
+                                      state_key: str,
+                                      on_press: Callable[[], Awaitable[None]],
+                                      on_release: Callable[[], Awaitable[None]]) -> None:
+        """Handle a UDP action whose meaning depends on press/release transitions."""
+        if code is None:
+            return
+
+        is_pressed = self._isUdpActionActive(buttons, code)
+        transition = self.m_udp_hold_action_tracker.update(state_key, is_pressed)
+        if transition is None:
+            return
+
+        self.m_udp_action_stats.track_event('__UDP_ACTIONS__', f"{name} {transition}")
+        self.m_logger.silent('UDP action %d %s - %s', code, transition, name)
+        if is_pressed:
+            await on_press()
+        else:
+            await on_release()
 
     def _handleSuspiciousSessionStart(self, session_uid: int) -> None:
         """Save data just in case when a suspicious session start event is received.

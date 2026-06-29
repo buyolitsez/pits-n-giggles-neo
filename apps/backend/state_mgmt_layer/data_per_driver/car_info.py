@@ -23,7 +23,7 @@
 # -------------------------------------- IMPORTS -----------------------------------------------------------------------
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from lib.f1_types import CarStatusData, CarDamageData, CarTelemetry2Data
 from lib.fuel_rate_recommender import FuelRateRecommender
@@ -49,6 +49,21 @@ class CarInfo:
     m_floor_damage: Optional[int] = None
     m_diffuser_damage: Optional[int] = None
     m_sidepod_damage: Optional[int] = None
+    m_tyres_damage: Optional[List[int]] = None
+    m_brakes_damage: Optional[List[int]] = None
+    m_tyre_blisters: Optional[List[int]] = None
+    m_drs_fault: Optional[bool] = None
+    m_ers_fault: Optional[bool] = None
+    m_gear_box_damage: Optional[int] = None
+    m_engine_damage: Optional[int] = None
+    m_engine_mguh_wear: Optional[int] = None
+    m_engine_es_wear: Optional[int] = None
+    m_engine_ce_wear: Optional[int] = None
+    m_engine_ice_wear: Optional[int] = None
+    m_engine_mguk_wear: Optional[int] = None
+    m_engine_tc_wear: Optional[int] = None
+    m_engine_blown: Optional[bool] = None
+    m_engine_seized: Optional[bool] = None
 
     m_curr_lap_ers_harv_mguk_j: Optional[float] = None
     m_curr_lap_ers_harv_mguh_j: Optional[float] = None
@@ -92,3 +107,44 @@ class CarInfo:
         self.m_floor_damage = car_damage.m_floorDamage
         self.m_diffuser_damage = car_damage.m_diffuserDamage
         self.m_sidepod_damage = car_damage.m_sidepodDamage
+        self.m_tyres_damage = list(car_damage.m_tyresDamage)
+        self.m_brakes_damage = list(car_damage.m_brakesDamage)
+        self.m_tyre_blisters = list(getattr(car_damage, "m_tyreBlisters", [0] * 4))
+        self.m_drs_fault = car_damage.m_drsFault
+        self.m_ers_fault = car_damage.m_ersFault
+        self.m_gear_box_damage = car_damage.m_gearBoxDamage
+        self.m_engine_damage = car_damage.m_engineDamage
+        self.m_engine_mguh_wear = car_damage.m_engineMGUHWear
+        self.m_engine_es_wear = car_damage.m_engineESWear
+        self.m_engine_ce_wear = car_damage.m_engineCEWear
+        self.m_engine_ice_wear = car_damage.m_engineICEWear
+        self.m_engine_mguk_wear = car_damage.m_engineMGUKWear
+        self.m_engine_tc_wear = car_damage.m_engineTCWear
+        self.m_engine_blown = car_damage.m_engineBlown
+        self.m_engine_seized = car_damage.m_engineSeized
+
+    def getDamageJSON(self) -> Dict[str, Any]:
+        """Get the car damage data as a JSON-serializable dictionary."""
+        return {
+            "fl-wing-damage": self.m_fl_wing_damage,
+            "fr-wing-damage": self.m_fr_wing_damage,
+            "rear-wing-damage": self.m_rear_wing_damage,
+            "floor-damage": self.m_floor_damage,
+            "diffuser-damage": self.m_diffuser_damage,
+            "sidepod-damage": self.m_sidepod_damage,
+            "tyres-damage": self.m_tyres_damage,
+            "brakes-damage": self.m_brakes_damage,
+            "tyre-blisters": self.m_tyre_blisters,
+            "drs-fault": self.m_drs_fault,
+            "ers-fault": self.m_ers_fault,
+            "gear-box-damage": self.m_gear_box_damage,
+            "engine-damage": self.m_engine_damage,
+            "engine-mguh-wear": self.m_engine_mguh_wear,
+            "engine-es-wear": self.m_engine_es_wear,
+            "engine-ce-wear": self.m_engine_ce_wear,
+            "engine-ice-wear": self.m_engine_ice_wear,
+            "engine-mguk-wear": self.m_engine_mguk_wear,
+            "engine-tc-wear": self.m_engine_tc_wear,
+            "engine-blown": self.m_engine_blown,
+            "engine-seized": self.m_engine_seized,
+        }

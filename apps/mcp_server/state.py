@@ -48,3 +48,7 @@ def set_state_data(topic: str, data: Dict[str, Any]) -> None:
 
 def get_state_data(topic: str, default: Optional[Any] = None) -> Optional[StateEntry]:
     return state_data.get(topic, default)
+
+
+def delete_state_data(topic: str) -> None:
+    state_data.pop(topic, None)

@@ -54,6 +54,7 @@ class PeriodicUpdateData(BaseAPI):
             is_tt_mode=(str(self.m_session_info.m_session_type) == "Time Trial"),
             send_position_data=send_position_data
         )
+        self.m_player_tyre_sets = self._get_player_tyre_sets(session_state)
         self.m_curr_lap = self.m_driver_list_rsp.getCurrentLap()
         if self.m_session_info.m_weather_forecast_samples is None:
             self.m_session_info.m_weather_forecast_samples = []
@@ -123,4 +124,17 @@ class PeriodicUpdateData(BaseAPI):
             self.m_driver_list_rsp.m_fastest_lap_driver_index)
         final_json["fastest-lap-overall-tyre"] = str(self.m_driver_list_rsp.m_fastest_lap_tyre) \
             if self.m_driver_list_rsp.m_fastest_lap_tyre else None
+        final_json["player-tyre-sets"] = self.m_player_tyre_sets.toJSON() if self.m_player_tyre_sets else None
         return final_json
+
+    def _get_player_tyre_sets(self, session_state: SessionState) -> Any:
+        ref_index = self.m_session_info.m_spectator_car_index \
+            if self.m_session_info.m_is_spectating else session_state.m_player_index
+        if ref_index is None:
+            return None
+        if not session_state.isIndexValid(ref_index):
+            return None
+        driver_data = session_state.m_driver_data[ref_index]
+        if not driver_data:
+            return None
+        return driver_data.m_packet_copies.m_packet_tyre_sets

@@ -20,12 +20,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# -------------------------------------- IMPORTS -----------------------------------------------------------------------
-
-from .mcp_server import MCPBridge
-
 # -------------------------------------- EXPORTS -----------------------------------------------------------------------
 
 __all__ = [
     "MCPBridge",
 ]
+
+# -------------------------------------- FUNCTIONS ---------------------------------------------------------------------
+
+def __getattr__(name: str):
+    """Lazily import the FastMCP bridge only when the bridge is requested."""
+    if name == "MCPBridge":
+        from .mcp_server import MCPBridge
+        return MCPBridge
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
