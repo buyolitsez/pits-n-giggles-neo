@@ -1,0 +1,267 @@
+# MIT License
+#
+# Copyright (c) [2026] [Ashwin Natarajan]
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# -------------------------------------- IMPORTS -----------------------------------------------------------------------
+
+from .announcer import RaceEngineerAnnouncement, RaceEngineerAnnouncer
+from .agent_prompts import (
+    ADVICE_CATEGORIES,
+    AGENT_PROMPTS,
+    CATEGORY_ALL,
+    CATEGORY_REVIEW,
+    DEFAULT_AGENT_PROMPTS_FILE_ENV_VAR,
+    PROMPT_CATEGORIES,
+    PROMPT_OVERRIDE_FIELDS,
+    RaceEngineerAgentPrompt,
+    build_agent_prompt_override_template,
+    get_agent_prompt_specs,
+    get_agent_prompt_texts,
+    load_agent_prompt_overrides,
+    load_agent_prompt_overrides_from_env,
+    normalise_agent_prompt_overrides,
+    save_agent_prompt_override_template,
+)
+from .azure_voice import (
+    AioHttpAzureSpeechClient,
+    AudioSink,
+    AzureSpeechClient,
+    AzureSpeechConfig,
+    AzureSpeechResponse,
+    AzureSpeechVoiceEngine,
+    DEFAULT_AZURE_SPEECH_KEY_ENV_VAR,
+    DEFAULT_AZURE_SPEECH_OUTPUT_FORMAT,
+    DEFAULT_AZURE_SPEECH_VOICE,
+    NoOpAudioSink,
+    WindowsWaveAudioSink,
+    build_azure_speech_endpoint_url,
+    build_azure_speech_headers,
+    build_azure_speech_ssml,
+)
+from .brief import RACE_ENGINEER_BRIEF_OUTPUT_SCHEMA, build_race_engineer_brief
+from .conversation import (
+    AioHttpConversationClient,
+    AsyncioCommandConversationRunner,
+    CodexConversationPromptPackage,
+    CodexCliConversationAgent,
+    CodexCliConversationConfig,
+    CommandConversationResponse,
+    CommandConversationRunner,
+    FallbackConversationAgent,
+    HttpConversationAgent,
+    HttpConversationClient,
+    HttpConversationConfig,
+    HttpConversationResponse,
+    LocalBriefConversationAgent,
+    RaceEngineerAnswer,
+    RaceEngineerConversationAgent,
+    build_codex_conversation_prompt_package,
+    build_http_conversation_headers,
+    infer_question_focus,
+    parse_conversation_command,
+)
+from .control import (
+    RACE_ENGINEER_CONTROL_TOPIC,
+    RACE_ENGINEER_PTT_CONTROL_TOPIC,
+    RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD,
+    RACE_ENGINEER_TOGGLE_ACTION_FIELD,
+    UdpHoldActionTracker,
+    forward_race_engineer_control_messages,
+    race_engineer_push_to_talk_message,
+    race_engineer_toggle_message,
+)
+from .diagnostics import (
+    RaceEngineerProfileDiagnostic,
+    diagnose_race_engineer_launch_profile,
+    format_race_engineer_profile_diagnostics,
+    race_engineer_profile_has_errors,
+)
+from .history import LapRecord, RaceEngineerHistory
+from .lap_trace import (
+    CompletedLapTrace,
+    DrivingTraceRecorder,
+    DrivingTraceSample,
+    sample_from_trace_update,
+    sample_from_stream_overlay,
+)
+from .launcher_status import (
+    RACE_ENGINEER_LAUNCHER_ATTENTION_STATUSES,
+    RACE_ENGINEER_LAUNCHER_STATUS_LABELS,
+    race_engineer_launcher_status_from_stats,
+    race_engineer_launcher_status_is_attention,
+)
+from .launch_profile import (
+    DEFAULT_RACE_ENGINEER_LAUNCH_PROFILE_FILE,
+    RACE_ENGINEER_FAST_LIVE_COMMAND_TIMEOUT_MS,
+    RACE_ENGINEER_QUESTION_TIMEOUT_GRACE_SECONDS,
+    RaceEngineerLaunchProfile,
+    default_race_engineer_launch_profile_path,
+    load_race_engineer_launch_profile,
+    race_engineer_launch_profile_from_dict,
+    race_engineer_launch_profile_to_cli_args,
+    race_engineer_live_question_timeout_ms,
+    race_engineer_profile_udp_action_code,
+    race_engineer_profile_udp_action_codes,
+    save_race_engineer_launch_profile,
+)
+from .microphone import (
+    DEFAULT_MICROPHONE_CHUNK_MS,
+    MicrophoneCaptureConfig,
+    PushToTalkMicrophoneCapture,
+    WindowsWaveInMicrophoneCapture,
+)
+from .push_to_talk import PushToTalkAudioBuffer, PushToTalkAudioClip
+from .review import AdviceReviewIssue, AdviceReviewResult, review_race_engineer_advice
+from .speech_recognition import (
+    AioHttpAzureSpeechRecognitionClient,
+    AzureSpeechRecognitionClient,
+    AzureSpeechRecognitionConfig,
+    AzureSpeechRecognitionResponse,
+    AzureSpeechRecognizer,
+    DEFAULT_AZURE_STT_CONTENT_TYPE,
+    DEFAULT_AZURE_STT_FORMAT,
+    DEFAULT_AZURE_STT_LANGUAGE,
+    SpeechRecognitionResult,
+    SpeechRecognizer,
+    build_azure_stt_endpoint_url,
+    build_azure_stt_headers,
+)
+from .voice import DryRunVoiceEngine, NullVoiceEngine, VoiceEngine, VoiceResult
+from .voice_queue import BoundedLatestVoiceQueue, VoiceQueuePushResult
+
+# -------------------------------------- EXPORTS -----------------------------------------------------------------------
+
+__all__ = [
+    "RACE_ENGINEER_BRIEF_OUTPUT_SCHEMA",
+    "ADVICE_CATEGORIES",
+    "AGENT_PROMPTS",
+    "CATEGORY_ALL",
+    "CATEGORY_REVIEW",
+    "DEFAULT_AGENT_PROMPTS_FILE_ENV_VAR",
+    "PROMPT_CATEGORIES",
+    "PROMPT_OVERRIDE_FIELDS",
+    "RaceEngineerAgentPrompt",
+    "build_agent_prompt_override_template",
+    "RaceEngineerAnnouncement",
+    "RaceEngineerAnnouncer",
+    "RaceEngineerAnswer",
+    "AioHttpConversationClient",
+    "AsyncioCommandConversationRunner",
+    "CodexConversationPromptPackage",
+    "CodexCliConversationAgent",
+    "CodexCliConversationConfig",
+    "CommandConversationResponse",
+    "CommandConversationRunner",
+    "FallbackConversationAgent",
+    "HttpConversationAgent",
+    "HttpConversationClient",
+    "HttpConversationConfig",
+    "HttpConversationResponse",
+    "RaceEngineerConversationAgent",
+    "LocalBriefConversationAgent",
+    "RACE_ENGINEER_CONTROL_TOPIC",
+    "RACE_ENGINEER_PTT_CONTROL_TOPIC",
+    "RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD",
+    "RACE_ENGINEER_TOGGLE_ACTION_FIELD",
+    "UdpHoldActionTracker",
+    "RaceEngineerProfileDiagnostic",
+    "LapRecord",
+    "RaceEngineerHistory",
+    "CompletedLapTrace",
+    "DrivingTraceRecorder",
+    "DrivingTraceSample",
+    "RACE_ENGINEER_LAUNCHER_ATTENTION_STATUSES",
+    "RACE_ENGINEER_LAUNCHER_STATUS_LABELS",
+    "DEFAULT_RACE_ENGINEER_LAUNCH_PROFILE_FILE",
+    "RACE_ENGINEER_FAST_LIVE_COMMAND_TIMEOUT_MS",
+    "RACE_ENGINEER_QUESTION_TIMEOUT_GRACE_SECONDS",
+    "RaceEngineerLaunchProfile",
+    "DEFAULT_MICROPHONE_CHUNK_MS",
+    "PushToTalkAudioBuffer",
+    "PushToTalkAudioClip",
+    "PushToTalkMicrophoneCapture",
+    "MicrophoneCaptureConfig",
+    "WindowsWaveInMicrophoneCapture",
+    "AioHttpAzureSpeechClient",
+    "AudioSink",
+    "AzureSpeechClient",
+    "AzureSpeechConfig",
+    "AzureSpeechResponse",
+    "AzureSpeechVoiceEngine",
+    "DEFAULT_AZURE_SPEECH_KEY_ENV_VAR",
+    "DEFAULT_AZURE_SPEECH_OUTPUT_FORMAT",
+    "DEFAULT_AZURE_SPEECH_VOICE",
+    "DryRunVoiceEngine",
+    "NoOpAudioSink",
+    "NullVoiceEngine",
+    "VoiceEngine",
+    "BoundedLatestVoiceQueue",
+    "VoiceResult",
+    "VoiceQueuePushResult",
+    "WindowsWaveAudioSink",
+    "build_azure_speech_endpoint_url",
+    "AdviceReviewIssue",
+    "AdviceReviewResult",
+    "AioHttpAzureSpeechRecognitionClient",
+    "AzureSpeechRecognitionClient",
+    "AzureSpeechRecognitionConfig",
+    "AzureSpeechRecognitionResponse",
+    "AzureSpeechRecognizer",
+    "DEFAULT_AZURE_STT_CONTENT_TYPE",
+    "DEFAULT_AZURE_STT_FORMAT",
+    "DEFAULT_AZURE_STT_LANGUAGE",
+    "SpeechRecognitionResult",
+    "SpeechRecognizer",
+    "build_azure_speech_headers",
+    "build_azure_speech_ssml",
+    "build_azure_stt_endpoint_url",
+    "build_azure_stt_headers",
+    "build_codex_conversation_prompt_package",
+    "build_http_conversation_headers",
+    "build_race_engineer_brief",
+    "default_race_engineer_launch_profile_path",
+    "diagnose_race_engineer_launch_profile",
+    "format_race_engineer_profile_diagnostics",
+    "forward_race_engineer_control_messages",
+    "get_agent_prompt_specs",
+    "get_agent_prompt_texts",
+    "infer_question_focus",
+    "parse_conversation_command",
+    "load_agent_prompt_overrides",
+    "load_agent_prompt_overrides_from_env",
+    "load_race_engineer_launch_profile",
+    "normalise_agent_prompt_overrides",
+    "save_agent_prompt_override_template",
+    "race_engineer_launch_profile_from_dict",
+    "race_engineer_launch_profile_to_cli_args",
+    "race_engineer_live_question_timeout_ms",
+    "race_engineer_launcher_status_from_stats",
+    "race_engineer_launcher_status_is_attention",
+    "race_engineer_profile_udp_action_code",
+    "race_engineer_profile_has_errors",
+    "race_engineer_push_to_talk_message",
+    "race_engineer_profile_udp_action_codes",
+    "race_engineer_toggle_message",
+    "review_race_engineer_advice",
+    "sample_from_stream_overlay",
+    "sample_from_trace_update",
+    "save_race_engineer_launch_profile",
+]
