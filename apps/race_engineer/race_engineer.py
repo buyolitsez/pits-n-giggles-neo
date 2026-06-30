@@ -1820,8 +1820,8 @@ def _preflight_next_steps(
 def _azure_key_next_step(env_var_name: str) -> str:
     name = str(env_var_name or DEFAULT_AZURE_SPEECH_KEY_ENV_VAR).strip() or DEFAULT_AZURE_SPEECH_KEY_ENV_VAR
     return (
-        f"Set {name} to your Azure Speech key, then rerun Preflight. "
-        f"PowerShell: $env:{name} = \"<Azure Speech key>\""
+        f"Set {name} as a User environment variable so the launcher can read it, then restart the launcher. "
+        f"PowerShell: [Environment]::SetEnvironmentVariable('{name}', '<Azure Speech key>', 'User')"
     )
 
 

@@ -703,8 +703,9 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
 
         self.assertFalse(summary["ok"])
         self.assertIn(
-            'Set PNG_TEST_AZURE_KEY to your Azure Speech key, then rerun Preflight. '
-            'PowerShell: $env:PNG_TEST_AZURE_KEY = "<Azure Speech key>"',
+            "Set PNG_TEST_AZURE_KEY as a User environment variable so the launcher can read it, "
+            "then restart the launcher. PowerShell: "
+            "[Environment]::SetEnvironmentVariable('PNG_TEST_AZURE_KEY', '<Azure Speech key>', 'User')",
             summary["next_steps"],
         )
 

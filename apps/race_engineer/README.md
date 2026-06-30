@@ -117,9 +117,10 @@ one profile question smoke test, and a push-to-talk readiness report into a
 single ready/not-ready result with next steps such as setting the Azure key,
 running `Mic PTT Test`, or restarting the backend after UDP binding changes.
 For a missing Azure key, the next step includes the exact PowerShell env-var
-assignment with a placeholder instead of printing or storing the secret. It does
-not record the microphone by surprise; for that live recording check use `Mic
-PTT Test`.
+assignment with a placeholder instead of printing or storing the secret. It uses
+the User environment scope so the launcher can read the key after restart. It
+does not record the microphone by surprise; for that live recording check use
+`Mic PTT Test`.
 
 The `Prompts` tab can create an editable JSON template with every advisor
 category and the current default prompt contract. Edit only the category fields
@@ -212,6 +213,13 @@ $env:PNG_AZURE_SPEECH_ENDPOINT = "https://francecentral.api.cognitive.microsoft.
 $env:PNG_AZURE_SPEECH_KEY = "<your Azure Speech key>"
 $env:PNG_RACE_ENGINEER_MIN_VOICE_INTERVAL_SECONDS = "4"
 poetry run python -m apps.launcher
+```
+
+For the desktop launcher, set the key in the User environment and restart the
+launcher:
+
+```powershell
+[Environment]::SetEnvironmentVariable('PNG_AZURE_SPEECH_KEY', '<your Azure Speech key>', 'User')
 ```
 
 For voice questions, set Azure STT and choose the push-to-talk audio source:

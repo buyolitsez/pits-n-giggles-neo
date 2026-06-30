@@ -223,8 +223,9 @@ Current implementation:
   covers the strategy/compound recommendation path. The summary includes a
   `next_steps` checklist for Azure key setup, endpoint/region setup,
   voice/question retests, live mic checks, and backend restarts after UDP
-  binding changes. Azure key hints include a PowerShell env-var assignment with
-  a placeholder, not the secret value.
+  binding changes. Azure key hints include a User-scope PowerShell env-var
+  assignment with a placeholder, not the secret value, so the desktop launcher
+  can read the key after restart.
 - Conversation prompt packages include a radio answer contract: answer in the
   same language as the driver's question, keep it to two short spoken
   sentences, and avoid markdown/bullets. The local fallback applies the same
