@@ -205,6 +205,10 @@ Current implementation:
   update this editable memory from spoken driver calibration such as "speak
   shorter", "do not repeat", or "answer in Russian"; future local, HTTP, and
   `codex_cli` answers receive those style preferences before speaking.
+- The `General` settings tab exposes radio timing. Non-critical automatic
+  callouts can wait for a calmer straight/calm moment from the latest driving
+  trace sample, while critical/system/Q&A replies bypass the delay and a max
+  delay prevents stale queued advice.
 - The standalone process also supports `--profile-check`, so the same offline
   launch-profile diagnostics can run from a terminal or automation before the
   game/launcher stack starts.

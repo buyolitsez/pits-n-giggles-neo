@@ -61,6 +61,7 @@ from lib.race_engineer import (
     MemoryConversationAgent,
     MicrophoneCaptureConfig,
     NullVoiceEngine,
+    RadioTimingConfig,
     RaceEngineerLaunchProfile,
     RaceEngineerAnnouncement,
     RaceEngineerAnswer,
@@ -81,6 +82,8 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
                 "PNG_RACE_ENGINEER_MAX_QUEUE_SIZE": "1",
                 "PNG_RACE_ENGINEER_MIN_VOICE_INTERVAL_SECONDS": "6.5",
                 "PNG_RACE_ENGINEER_INITIAL_ENABLED": "false",
+                "PNG_RACE_ENGINEER_RADIO_TIMING_ENABLED": "false",
+                "PNG_RACE_ENGINEER_RADIO_TIMING_MAX_DELAY_SECONDS": "11.5",
                 "PNG_RACE_ENGINEER_VOICE_PROVIDER": "azure",
                 "PNG_RACE_ENGINEER_SPEECH_RECOGNITION_PROVIDER": "azure",
                 "PNG_RACE_ENGINEER_PUSH_TO_TALK_AUDIO_SOURCE": "windows_microphone",
@@ -110,6 +113,8 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertEqual(args.max_queue_size, 1)
         self.assertEqual(args.min_voice_interval_seconds, 6.5)
         self.assertFalse(args.initial_enabled)
+        self.assertFalse(args.radio_timing_enabled)
+        self.assertEqual(args.radio_timing_max_delay_seconds, 11.5)
         self.assertEqual(args.voice_provider, "azure")
         self.assertEqual(args.speech_recognition_provider, "azure")
         self.assertEqual(args.push_to_talk_audio_source, "windows_microphone")
@@ -1912,6 +1917,86 @@ class TestRaceEngineerAppRoutes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["dropped-announcements-count"], 1)
         self.assertEqual(stats["rate-limited-announcements-count"], 1)
 
+    async def test_radio_timing_waits_for_safe_window_before_noncritical_voice(self):
+        clock = _FakeClock(100.0)
+        voice_engine = _RecordingVoiceEngine()
+        with _fake_ipc_module():
+            app = RaceEngineerApp(
+                logger=_SilentLogger(),
+                broker_xpub_port=4242,
+                voice_engine=voice_engine,
+                min_priority="advisory",
+                cooldown_seconds=20,
+                max_items=5,
+                max_queue_size=3,
+                focus="all",
+                monotonic_clock=clock.now,
+                radio_timing_config=RadioTimingConfig(
+                    enabled=True,
+                    max_delay_seconds=5.0,
+                    check_interval_seconds=0.01,
+                ),
+            )
+
+        await app.subscriber.routes["race-engineer-trace-update"](
+            _trace_sample(lap=1, distance=10, timestamp=1.0, brake=60, throttle=0, steering=4)
+        )
+        app._queue_announcement(_announcement("timed", "warning"))
+        app._voice_task = asyncio.create_task(app._voice_worker())
+        await asyncio.sleep(0.03)
+
+        self.assertEqual(voice_engine.calls, [])
+        self.assertEqual(app.get_stats()["radio-timing-delay-count"], 1)
+        self.assertEqual(app.get_stats()["last-radio-timing-decision"]["reason"], "braking")
+
+        clock.value = 101.0
+        await app.subscriber.routes["race-engineer-trace-update"](
+            _trace_sample(lap=1, distance=20, timestamp=2.0, brake=0, throttle=80, steering=5)
+        )
+        await _wait_until(lambda: len(voice_engine.calls) == 1)
+
+        self.assertEqual(voice_engine.calls[0]["metadata"]["advice_id"], "timed")
+        self.assertEqual(app.get_stats()["announcements-count"], 1)
+        self.assertEqual(app.get_stats()["last-radio-timing-decision"]["reason"], "safe-window")
+
+        app.close()
+        await app._stop_voice_worker()
+
+    async def test_radio_timing_critical_callout_bypasses_busy_window(self):
+        clock = _FakeClock(100.0)
+        voice_engine = _RecordingVoiceEngine()
+        with _fake_ipc_module():
+            app = RaceEngineerApp(
+                logger=_SilentLogger(),
+                broker_xpub_port=4242,
+                voice_engine=voice_engine,
+                min_priority="advisory",
+                cooldown_seconds=20,
+                max_items=5,
+                max_queue_size=3,
+                focus="all",
+                monotonic_clock=clock.now,
+                radio_timing_config=RadioTimingConfig(
+                    enabled=True,
+                    max_delay_seconds=5.0,
+                    check_interval_seconds=0.01,
+                ),
+            )
+
+        await app.subscriber.routes["race-engineer-trace-update"](
+            _trace_sample(lap=1, distance=10, timestamp=1.0, brake=60, throttle=0, steering=4)
+        )
+        app._queue_announcement(_announcement("critical-now", "critical"))
+        app._voice_task = asyncio.create_task(app._voice_worker())
+        await _wait_until(lambda: len(voice_engine.calls) == 1)
+
+        self.assertEqual(voice_engine.calls[0]["metadata"]["advice_id"], "critical-now")
+        self.assertEqual(app.get_stats()["radio-timing-delay-count"], 0)
+        self.assertEqual(app.get_stats()["last-radio-timing-decision"]["reason"], "critical")
+
+        app.close()
+        await app._stop_voice_worker()
+
     async def test_failed_voice_result_is_reported_in_stats(self):
         voice_engine = _RecordingVoiceEngine(
             VoiceResult(
@@ -2315,7 +2400,7 @@ def _trace_lap_samples(*, lap, speed, throttle, brake, timestamp_offset=0.0):
     ]
 
 
-def _trace_sample(*, lap, distance, timestamp, speed=210, throttle=80, brake=0):
+def _trace_sample(*, lap, distance, timestamp, speed=210, throttle=80, brake=0, steering=-12):
     return {
         "ok": True,
         "session-uid": "abc",
@@ -2329,7 +2414,7 @@ def _trace_sample(*, lap, distance, timestamp, speed=210, throttle=80, brake=0):
         "speed-kmph": speed,
         "throttle-pct": throttle,
         "brake-pct": brake,
-        "steering-pct": -12,
+        "steering-pct": steering,
         "gear": 6,
         "drs": 0,
         "segment-label": None,

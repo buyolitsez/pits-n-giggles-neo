@@ -146,6 +146,15 @@ from .microphone import (
     WindowsWaveInMicrophoneCapture,
 )
 from .push_to_talk import PushToTalkAudioBuffer, PushToTalkAudioClip
+from .radio_timing import (
+    DEFAULT_RADIO_TIMING_CHECK_INTERVAL_SECONDS,
+    DEFAULT_RADIO_TIMING_ENABLED,
+    DEFAULT_RADIO_TIMING_MAX_DELAY_SECONDS,
+    RadioTimingConfig,
+    RadioTimingDecision,
+    decide_radio_timing,
+    normalise_radio_timing_config,
+)
 from .review import AdviceReviewIssue, AdviceReviewResult, review_race_engineer_advice
 from .speech_recognition import (
     AioHttpAzureSpeechRecognitionClient,
@@ -219,6 +228,11 @@ __all__ = [
     "DEFAULT_MICROPHONE_CHUNK_MS",
     "PushToTalkAudioBuffer",
     "PushToTalkAudioClip",
+    "DEFAULT_RADIO_TIMING_CHECK_INTERVAL_SECONDS",
+    "DEFAULT_RADIO_TIMING_ENABLED",
+    "DEFAULT_RADIO_TIMING_MAX_DELAY_SECONDS",
+    "RadioTimingConfig",
+    "RadioTimingDecision",
     "PushToTalkMicrophoneCapture",
     "MicrophoneCaptureConfig",
     "WindowsWaveInMicrophoneCapture",
@@ -259,6 +273,7 @@ __all__ = [
     "build_codex_conversation_prompt_package",
     "build_http_conversation_headers",
     "build_race_engineer_brief",
+    "decide_radio_timing",
     "apply_race_engineer_memory_feedback",
     "default_race_engineer_launch_profile_path",
     "default_race_engineer_memory_path",
@@ -274,6 +289,7 @@ __all__ = [
     "load_race_engineer_launch_profile",
     "load_race_engineer_memory",
     "normalise_agent_prompt_overrides",
+    "normalise_radio_timing_config",
     "save_agent_prompt_override_template",
     "race_engineer_launch_profile_from_dict",
     "race_engineer_launch_profile_to_cli_args",

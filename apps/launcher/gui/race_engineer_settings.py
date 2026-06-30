@@ -212,6 +212,8 @@ class RaceEngineerSettingsDialog(QDialog):
         self.min_voice_interval_seconds = _double_spin(0.0, 60.0, 1)
         self.max_items = _spin(1, 10)
         self.max_queue_size = _spin(1, 10)
+        self.radio_timing_enabled = QCheckBox()
+        self.radio_timing_max_delay_seconds = _double_spin(0.0, 30.0, 1)
 
         form.addRow("Start online", self.initial_enabled)
         form.addRow("Default focus", self.focus)
@@ -220,6 +222,8 @@ class RaceEngineerSettingsDialog(QDialog):
         form.addRow("Minimum voice interval", self.min_voice_interval_seconds)
         form.addRow("Advice items per snapshot", self.max_items)
         form.addRow("Voice queue size", self.max_queue_size)
+        form.addRow("Radio timing", self.radio_timing_enabled)
+        form.addRow("Max radio delay", self.radio_timing_max_delay_seconds)
         return tab
 
     def _build_voice_tab(self) -> QWidget:
@@ -335,6 +339,8 @@ class RaceEngineerSettingsDialog(QDialog):
         self.min_voice_interval_seconds.setValue(profile.min_voice_interval_seconds)
         self.max_items.setValue(profile.max_items)
         self.max_queue_size.setValue(profile.max_queue_size)
+        self.radio_timing_enabled.setChecked(profile.radio_timing_enabled)
+        self.radio_timing_max_delay_seconds.setValue(profile.radio_timing_max_delay_seconds)
 
         _set_combo(self.voice_provider, profile.voice_provider)
         self.azure_region.setText(profile.azure_region)
@@ -372,6 +378,8 @@ class RaceEngineerSettingsDialog(QDialog):
             min_voice_interval_seconds=self.min_voice_interval_seconds.value(),
             max_items=self.max_items.value(),
             max_queue_size=self.max_queue_size.value(),
+            radio_timing_enabled=self.radio_timing_enabled.isChecked(),
+            radio_timing_max_delay_seconds=self.radio_timing_max_delay_seconds.value(),
             voice_provider=self.voice_provider.currentText(),
             azure_region=self.azure_region.text().strip(),
             azure_speech_endpoint=self.azure_speech_endpoint.text().strip(),

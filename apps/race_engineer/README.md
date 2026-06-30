@@ -136,6 +136,12 @@ defaults and creates it the first time you give calibration feedback such as
 button writes a blank template, and `Open` opens the JSON so you can inspect or
 edit remembered style rules by hand.
 
+The `General` tab has `Radio timing` controls. When enabled, non-critical
+automatic callouts wait for a safer straight/calm moment using the latest
+driving trace sample: low brake, small steering angle, enough speed, and
+positive throttle. Critical calls and system/Q&A replies still speak
+immediately. `Max radio delay` caps the wait so advice cannot get stuck.
+
 The same check is available from the command line:
 
 ```powershell
@@ -283,6 +289,13 @@ $env:PNG_RACE_ENGINEER_CONVERSATION_COMMAND = "codex-wrapper --answer-race-engin
 The wrapper can call whatever Codex CLI command is installed locally. If the
 command exits non-zero, times out, or returns an empty answer, the race engineer
 falls back to the local brief answerer.
+
+Radio timing can also be configured without the launcher:
+
+```powershell
+$env:PNG_RACE_ENGINEER_RADIO_TIMING_ENABLED = "true"
+$env:PNG_RACE_ENGINEER_RADIO_TIMING_MAX_DELAY_SECONDS = "8"
+```
 
 Custom category prompts can be loaded from a JSON file without storing secrets
 or changing the main config yet:

@@ -50,6 +50,8 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
             "azure_key_env_var": "not a valid env var",
             "conversation_provider": "codex",
             "memory_file": "C:\\temp\\race-engineer-memory.json",
+            "radio_timing_enabled": "off",
+            "radio_timing_max_delay_seconds": "12.5",
             "race_engineer_toggle_udp_action_code": 4,
             "race_engineer_push_to_talk_udp_action_code": 4,
         })
@@ -62,6 +64,8 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
         self.assertEqual(profile.azure_key_env_var, "PNG_AZURE_SPEECH_KEY")
         self.assertEqual(profile.conversation_provider, "local_brief")
         self.assertEqual(profile.memory_file, "C:\\temp\\race-engineer-memory.json")
+        self.assertFalse(profile.radio_timing_enabled)
+        self.assertEqual(profile.radio_timing_max_delay_seconds, 12.5)
         self.assertEqual(profile.race_engineer_toggle_udp_action_code, 4)
         self.assertIsNone(profile.race_engineer_push_to_talk_udp_action_code)
 
@@ -98,6 +102,8 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
             conversation_key_env_var="PNG_CODEX_PROXY_KEY",
             agent_prompts_file="C:\\temp\\prompts.json",
             memory_file="C:\\temp\\memory.json",
+            radio_timing_enabled=False,
+            radio_timing_max_delay_seconds=9.0,
             no_audio_playback=True,
         )
 
@@ -113,6 +119,8 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
         self.assertEqual(args[args.index("--conversation-key-env-var") + 1], "PNG_CODEX_PROXY_KEY")
         self.assertEqual(args[args.index("--agent-prompts-file") + 1], "C:\\temp\\prompts.json")
         self.assertEqual(args[args.index("--memory-file") + 1], "C:\\temp\\memory.json")
+        self.assertEqual(args[args.index("--radio-timing-enabled") + 1], "false")
+        self.assertEqual(args[args.index("--radio-timing-max-delay-seconds") + 1], "9.0")
         self.assertIn("--no-audio-playback", args)
 
     def test_codex_cli_provider_survives_profile_normalisation(self):

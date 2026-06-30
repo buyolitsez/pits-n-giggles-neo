@@ -63,6 +63,7 @@ from lib.race_engineer import (
     NullVoiceEngine,
     PushToTalkAudioBuffer,
     PushToTalkMicrophoneCapture,
+    RadioTimingConfig,
     RaceEngineerAnnouncer,
     RaceEngineerAnnouncement,
     RaceEngineerAnswer,
@@ -83,6 +84,9 @@ from lib.race_engineer import (
     race_engineer_profile_diagnostic_next_steps,
     race_engineer_launch_profile_to_cli_args,
     race_engineer_profile_has_errors,
+    decide_radio_timing,
+    normalise_radio_timing_config,
+    sample_from_stream_overlay,
     sample_from_trace_update,
     save_agent_prompt_override_template,
 )
@@ -151,6 +155,7 @@ class RaceEngineerApp:
         push_to_talk_buffer: Optional[PushToTalkAudioBuffer] = None,
         microphone_capture: Optional[PushToTalkMicrophoneCapture] = None,
         monotonic_clock: Optional[Callable[[], float]] = None,
+        radio_timing_config: Optional[RadioTimingConfig] = None,
     ) -> None:
         from lib.ipc import IpcSubscriberAsync
 
@@ -159,6 +164,7 @@ class RaceEngineerApp:
         self.focus = focus
         self.min_voice_interval_seconds = max(0.0, min_voice_interval_seconds)
         self._monotonic_clock = monotonic_clock or time.monotonic
+        self.radio_timing_config = radio_timing_config or RadioTimingConfig()
         self.subscriber = IpcSubscriberAsync(port=broker_xpub_port, logger=logger)
         self.announcer = RaceEngineerAnnouncer(
             min_priority=min_priority,
@@ -193,6 +199,11 @@ class RaceEngineerApp:
         self._last_voice_result: Optional[Dict[str, Any]] = None
         self._last_question_result: Optional[Dict[str, Any]] = None
         self._last_speech_recognition_result: Optional[Dict[str, Any]] = None
+        self._last_radio_timing_sample = None
+        self._last_radio_timing_sample_received_at: Optional[float] = None
+        self._last_radio_timing_decision: Optional[Dict[str, Any]] = None
+        self._radio_timing_delay_count = 0
+        self._radio_timing_force_count = 0
         self._last_voice_queued_at: Optional[float] = None
         self._noncritical_voice_queue_times: deque[float] = deque()
         self._session_uid: Optional[str] = None
@@ -247,6 +258,12 @@ class RaceEngineerApp:
             "session-generation": self._session_generation,
             "voice-queue-size": self.voice_queue.qsize(),
             "min-voice-interval-seconds": self.min_voice_interval_seconds,
+            "radio-timing-enabled": self.radio_timing_config.enabled,
+            "radio-timing-max-delay-seconds": self.radio_timing_config.max_delay_seconds,
+            "radio-timing-delay-count": self._radio_timing_delay_count,
+            "radio-timing-force-count": self._radio_timing_force_count,
+            "last-radio-timing-decision": self._last_radio_timing_decision,
+            "has-radio-timing-sample": self._last_radio_timing_sample is not None,
             "trace-reference-laps": self.trace_recorder.reference_lap_count,
             "subscriber": self.subscriber.get_stats(),
         }
@@ -295,6 +312,8 @@ class RaceEngineerApp:
                 return
             if self._using_backend_trace:
                 return
+            sample = sample_from_stream_overlay(msg)
+            self._record_radio_timing_sample(sample)
             advice = self.trace_recorder.update_from_stream_overlay(msg)
             self._queue_trace_advice(advice)
 
@@ -307,6 +326,7 @@ class RaceEngineerApp:
             if sample is None:
                 return
             self._using_backend_trace = True
+            self._record_radio_timing_sample(sample)
             advice = self.trace_recorder.update_sample(sample)
             self._queue_trace_advice(advice)
 
@@ -599,6 +619,9 @@ class RaceEngineerApp:
             self._session_generation += 1
             self._last_voice_queued_at = None
             self._noncritical_voice_queue_times.clear()
+            self._last_radio_timing_sample = None
+            self._last_radio_timing_sample_received_at = None
+            self._last_radio_timing_decision = None
             self._cancel_active_voice("session changed during playback")
             return
         if session_uid == self._session_uid:
@@ -614,9 +637,17 @@ class RaceEngineerApp:
         self._using_backend_trace = False
         self._last_voice_queued_at = None
         self._noncritical_voice_queue_times.clear()
+        self._last_radio_timing_sample = None
+        self._last_radio_timing_sample_received_at = None
+        self._last_radio_timing_decision = None
         self._cancel_active_voice("session changed during playback")
         self.announcer.clear()
         self.trace_recorder.clear()
+
+    def _record_radio_timing_sample(self, sample) -> None:
+        if sample is not None:
+            self._last_radio_timing_sample = sample
+            self._last_radio_timing_sample_received_at = self._monotonic_clock()
 
     def _queue_trace_advice(self, advice: List[Dict[str, Any]]) -> None:
         announcements = self.announcer.process_advice_items(
@@ -627,10 +658,10 @@ class RaceEngineerApp:
             self._queue_announcement(announcement)
 
     def _queue_announcement(self, announcement: Any, *, bypass_rate_limit: bool = False) -> None:
-        announcement = self._tag_announcement(announcement)
+        queued_at = self._monotonic_clock()
+        announcement = self._tag_announcement(announcement, queued_at=queued_at)
         priority_rank = _voice_priority_rank(getattr(announcement, "priority", None))
         is_critical = priority_rank == _VOICE_PRIORITY_RANK["critical"]
-        queued_at = self._monotonic_clock()
 
         if (
             not is_critical
@@ -663,9 +694,16 @@ class RaceEngineerApp:
         if not is_critical and not bypass_rate_limit:
             self._track_voice_output_activity(queued_at)
 
-    def _tag_announcement(self, announcement: Any) -> Any:
+    def _tag_announcement(self, announcement: Any, *, queued_at: Optional[float] = None) -> Any:
         if isinstance(announcement, RaceEngineerAnnouncement):
-            return replace(announcement, session_generation=self._session_generation)
+            metrics = dict(announcement.metrics)
+            if queued_at is not None:
+                metrics["radio_timing_queued_at"] = queued_at
+            return replace(
+                announcement,
+                session_generation=self._session_generation,
+                metrics=metrics,
+            )
         return announcement
 
     def _is_voice_rate_limited(self, now: float, announcement: Any) -> bool:
@@ -778,6 +816,8 @@ class RaceEngineerApp:
                 if self._is_obsolete_announcement(announcement):
                     self._record_aborted_announcement(announcement, "session changed before playback")
                     continue
+                if not await self._wait_for_radio_timing_window(announcement):
+                    continue
 
                 active_voice_task = asyncio.create_task(
                     self._speak_announcement(announcement),
@@ -841,6 +881,45 @@ class RaceEngineerApp:
             "cooldown-key": announcement.cooldown_key,
             "session-generation": getattr(announcement, "session_generation", None),
         }
+
+    async def _wait_for_radio_timing_window(self, announcement: Any) -> bool:
+        recorded_delay = False
+        while True:
+            if self._is_obsolete_announcement(announcement):
+                self._record_aborted_announcement(announcement, "session changed before radio timing window")
+                return False
+            decision = self._radio_timing_decision(announcement)
+            self._last_radio_timing_decision = {
+                **decision.to_dict(),
+                "advice-id": getattr(announcement, "advice_id", None),
+            }
+            if not decision.should_delay:
+                if decision.forced:
+                    self._radio_timing_force_count += 1
+                return True
+            if not recorded_delay:
+                self._radio_timing_delay_count += 1
+                recorded_delay = True
+                self.logger.debug(
+                    "Delaying race engineer callout %s for radio timing: %s",
+                    getattr(announcement, "advice_id", "unknown"),
+                    decision.reason,
+                )
+            await asyncio.sleep(self.radio_timing_config.check_interval_seconds)
+
+    def _radio_timing_decision(self, announcement: Any):
+        metrics = getattr(announcement, "metrics", {})
+        queued_at = None
+        if isinstance(metrics, dict):
+            queued_at = _float_or_none(metrics.get("radio_timing_queued_at"))
+        return decide_radio_timing(
+            announcement,
+            sample=self._last_radio_timing_sample,
+            now=self._monotonic_clock(),
+            queued_at=queued_at,
+            config=self.radio_timing_config,
+            sample_received_at=self._last_radio_timing_sample_received_at,
+        )
 
     def _record_aborted_announcement(self, announcement: Any, reason: str) -> None:
         self._aborted_announcements_count += 1
@@ -950,6 +1029,18 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=_arg_bool,
         default=_env_bool("PNG_RACE_ENGINEER_INITIAL_ENABLED", True),
         help="Whether the race engineer starts online or muted",
+    )
+    parser.add_argument(
+        "--radio-timing-enabled",
+        type=_arg_bool,
+        default=_env_bool("PNG_RACE_ENGINEER_RADIO_TIMING_ENABLED", True),
+        help="Delay non-critical radio callouts until a calmer driving window",
+    )
+    parser.add_argument(
+        "--radio-timing-max-delay-seconds",
+        type=float,
+        default=_env_float("PNG_RACE_ENGINEER_RADIO_TIMING_MAX_DELAY_SECONDS", 8.0),
+        help="Maximum delay before a non-critical callout is forced through",
     )
     parser.add_argument(
         "--voice-provider",
@@ -1297,6 +1388,10 @@ async def main(args: argparse.Namespace) -> None:
         conversation_agent=conversation_agent,
         speech_recognizer=speech_recognizer,
         microphone_capture=microphone_capture,
+        radio_timing_config=normalise_radio_timing_config(
+            enabled=getattr(args, "radio_timing_enabled", True),
+            max_delay_seconds=getattr(args, "radio_timing_max_delay_seconds", 8.0),
+        ),
     )
     tasks: List[asyncio.Task] = []
 
@@ -2190,6 +2285,13 @@ def _float_or_default(value: Any, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _safe_optional_text(value: Any) -> Optional[str]:

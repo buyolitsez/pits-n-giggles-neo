@@ -37,6 +37,7 @@ from .azure_voice import (
     DEFAULT_AZURE_SPEECH_VOICE,
 )
 from .memory import DEFAULT_RACE_ENGINEER_MEMORY_FILE
+from .radio_timing import DEFAULT_RADIO_TIMING_ENABLED, DEFAULT_RADIO_TIMING_MAX_DELAY_SECONDS
 from .speech_recognition import DEFAULT_AZURE_STT_CONTENT_TYPE, DEFAULT_AZURE_STT_FORMAT, DEFAULT_AZURE_STT_LANGUAGE
 
 # -------------------------------------- CONSTANTS ---------------------------------------------------------------------
@@ -66,6 +67,8 @@ class RaceEngineerLaunchProfile:
     min_voice_interval_seconds: float = 4.0
     max_items: int = 5
     max_queue_size: int = 3
+    radio_timing_enabled: bool = DEFAULT_RADIO_TIMING_ENABLED
+    radio_timing_max_delay_seconds: float = DEFAULT_RADIO_TIMING_MAX_DELAY_SECONDS
 
     voice_provider: str = "dry_run"
     azure_region: str = ""
@@ -149,6 +152,9 @@ def race_engineer_launch_profile_from_dict(value: Any) -> RaceEngineerLaunchProf
             data["min_voice_interval_seconds"], 0.0, 60.0, defaults.min_voice_interval_seconds),
         max_items=_bounded_int(data["max_items"], 1, 10, defaults.max_items),
         max_queue_size=_bounded_int(data["max_queue_size"], 1, 10, defaults.max_queue_size),
+        radio_timing_enabled=_bool(data["radio_timing_enabled"], defaults.radio_timing_enabled),
+        radio_timing_max_delay_seconds=_bounded_float(
+            data["radio_timing_max_delay_seconds"], 0.0, 30.0, defaults.radio_timing_max_delay_seconds),
         voice_provider=_choice(_text(data["voice_provider"]).replace("-", "_"), _VOICE_PROVIDERS, defaults.voice_provider),
         azure_region=_text(data["azure_region"]),
         azure_speech_endpoint=_text(data["azure_speech_endpoint"]),
@@ -208,6 +214,8 @@ def race_engineer_launch_profile_to_cli_args(profile: RaceEngineerLaunchProfile)
         "--min-voice-interval-seconds", str(profile.min_voice_interval_seconds),
         "--max-items", str(profile.max_items),
         "--max-queue-size", str(profile.max_queue_size),
+        "--radio-timing-enabled", _bool_text(profile.radio_timing_enabled),
+        "--radio-timing-max-delay-seconds", str(profile.radio_timing_max_delay_seconds),
         "--voice-provider", profile.voice_provider,
         "--azure-region", profile.azure_region,
         "--azure-speech-endpoint", profile.azure_speech_endpoint,
