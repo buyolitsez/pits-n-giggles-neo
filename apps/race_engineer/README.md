@@ -102,9 +102,9 @@ while the process is running and shows a compact live badge such as `Online`,
 The settings dialog also has `Check`, `Voice Test`, `Question Test`,
 `Audio Q Test`, `Mic PTT Test`, and `Preflight` buttons. `Check` runs offline setup diagnostics for the profile: Azure
 endpoint/region, key environment variable presence, STT/PTT compatibility,
-Codex CLI command shape, prompt file path, and UDP action conflicts. It does
-not contact Azure, does not print secret values, and shows the same setup
-next-steps used by `Preflight`. `Voice Test` runs a
+Codex CLI command shape, prompt file path plus prompt JSON schema, and UDP
+action conflicts. It does not contact Azure, does not print secret values, and
+shows the same setup next-steps used by `Preflight`. `Voice Test` runs a
 one-message profile voice smoke test from the current form values through a
 temporary profile, so the saved profile is not changed unless `Save` is
 pressed. `Question Test` asks one typed question through the current local,
@@ -126,6 +126,8 @@ does not record the microphone by surprise; for that live recording check use
 The `Prompts` tab can create an editable JSON template with every advisor
 category and the current default prompt contract. Edit only the category fields
 you want to override, then keep that file selected in the profile.
+`Check` and `Preflight` validate that the selected JSON has known advisor
+categories and supported fields before it can affect runtime answers.
 
 The same check is available from the command line:
 

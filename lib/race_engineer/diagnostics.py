@@ -24,12 +24,14 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import os
 import shutil
 import sys
 from typing import Mapping, Optional
 from urllib.parse import urlparse
 
+from .agent_prompts import load_agent_prompt_overrides
 from .conversation import parse_conversation_command
 from .launch_profile import RaceEngineerLaunchProfile
 
@@ -128,6 +130,8 @@ def race_engineer_profile_diagnostic_next_steps(
         steps.append("Install the conversation command executable or fix the CLI command path.")
     if "agent-prompts-file-missing" in codes:
         steps.append("Create or choose an agent prompts JSON file, then rerun Check.")
+    if "agent-prompts-file-invalid" in codes:
+        steps.append("Fix the agent prompts JSON file or create a fresh template from the Prompts tab.")
     if "udp-action-conflict" in codes:
         steps.append("Use different UDP action codes for toggle and push-to-talk.")
     if "ptt-speech-recognition-disabled" in codes:
@@ -236,6 +240,15 @@ def _check_prompt_file(
             severity="error",
             code="agent-prompts-file-missing",
             message=f"Agent prompts file {profile.agent_prompts_file!r} does not exist.",
+        ))
+        return
+    try:
+        load_agent_prompt_overrides(profile.agent_prompts_file)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        issues.append(RaceEngineerProfileDiagnostic(
+            severity="error",
+            code="agent-prompts-file-invalid",
+            message=f"Agent prompts file {profile.agent_prompts_file!r} is not valid: {exc}",
         ))
 
 

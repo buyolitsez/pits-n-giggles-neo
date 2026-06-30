@@ -1337,7 +1337,7 @@ async def run_profile_preflight(
     question_errors = [
         item for item in diagnostics
         if item.severity == "error"
-        and (item.code.startswith("conversation-") or item.code == "agent-prompts-file-missing")
+        and (item.code.startswith("conversation-") or item.code.startswith("agent-prompts-file-"))
     ]
 
     if voice_errors:

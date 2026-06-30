@@ -774,6 +774,42 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertIn("conversation-http-endpoint-missing", codes)
         self.assertIn("Fix the HTTP answer provider URL, then run Question Test.", summary["next_steps"])
 
+    def test_run_profile_preflight_skips_question_with_invalid_prompt_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            prompts_path = os.path.join(tmp_dir, "race-engineer-prompts.json")
+            with open(prompts_path, "w", encoding="utf-8") as file_obj:
+                file_obj.write('{"prompts": {"banana": {"role": "Nope"}}}')
+            path = os.path.join(tmp_dir, "race_engineer_profile.json")
+            save_race_engineer_launch_profile(
+                RaceEngineerLaunchProfile(
+                    voice_provider="dry_run",
+                    conversation_provider="local_brief",
+                    agent_prompts_file=prompts_path,
+                ),
+                path,
+            )
+            args = types.SimpleNamespace(
+                profile_file=path,
+                profile_voice_test="Radio check.",
+                profile_preflight_question="как топливо?",
+                question_snapshot="",
+                debug=False,
+                managed=False,
+                log_file="unused.log",
+            )
+
+            with patch("builtins.print"):
+                summary = asyncio.run(run_profile_preflight(args, _SilentLogger()))
+
+        self.assertFalse(summary["ok"])
+        self.assertTrue(summary["question"]["skipped"])
+        codes = {item["code"] for item in summary["diagnostics"]}
+        self.assertIn("agent-prompts-file-invalid", codes)
+        self.assertIn(
+            "Fix the agent prompts JSON file or create a fresh template from the Prompts tab.",
+            summary["next_steps"],
+        )
+
     def test_run_profile_preflight_reports_load_failure_next_step(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = os.path.join(tmp_dir, "race_engineer_profile.json")

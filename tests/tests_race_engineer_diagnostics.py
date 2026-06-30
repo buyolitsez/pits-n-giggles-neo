@@ -23,6 +23,9 @@
 # pylint: skip-file
 
 import unittest
+import json
+import tempfile
+from pathlib import Path
 
 from lib.race_engineer import (
     RaceEngineerLaunchProfile,
@@ -167,6 +170,32 @@ class TestRaceEngineerProfileDiagnostics(unittest.TestCase):
         )
 
         self.assertEqual(_codes(diagnostics), ["agent-prompts-file-missing"])
+
+    def test_prompt_file_must_be_valid_json(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "race-engineer-prompts.json"
+            path.write_text("{", encoding="utf-8")
+            diagnostics = diagnose_race_engineer_launch_profile(
+                RaceEngineerLaunchProfile(agent_prompts_file=str(path)),
+            )
+
+        self.assertEqual(_codes(diagnostics), ["agent-prompts-file-invalid"])
+        self.assertTrue(race_engineer_profile_has_errors(diagnostics))
+        self.assertIn(
+            "Fix the agent prompts JSON file or create a fresh template from the Prompts tab.",
+            race_engineer_profile_diagnostic_next_steps(RaceEngineerLaunchProfile(), diagnostics),
+        )
+
+    def test_prompt_file_must_use_known_categories_and_fields(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "race-engineer-prompts.json"
+            path.write_text(json.dumps({"prompts": {"banana": {"role": "Nope"}}}), encoding="utf-8")
+            diagnostics = diagnose_race_engineer_launch_profile(
+                RaceEngineerLaunchProfile(agent_prompts_file=str(path)),
+            )
+
+        self.assertEqual(_codes(diagnostics), ["agent-prompts-file-invalid"])
+        self.assertIn("Unknown race engineer prompt category", diagnostics[0].message)
 
     def test_udp_action_conflict_is_reported(self):
         diagnostics = diagnose_race_engineer_launch_profile(
