@@ -272,6 +272,10 @@ noise before
                 "audio_source": "windows_microphone",
                 "message": "Windows microphone push-to-talk is configured. Run Mic PTT Test.",
             },
+            "next_steps": [
+                "Run Mic PTT Test before driving to verify the real microphone path.",
+                "Restart the backend after changing UDP action bindings.",
+            ],
         })
 
         formatted = format_profile_preflight_output(output)
@@ -282,6 +286,9 @@ noise before
         self.assertIn("Push-to-talk: OK", formatted)
         self.assertIn("Run Mic PTT Test", formatted)
         self.assertIn("Fuel is tight.", formatted)
+        self.assertIn("Next steps:", formatted)
+        self.assertIn("- Run Mic PTT Test before driving to verify the real microphone path.", formatted)
+        self.assertIn("- Restart the backend after changing UDP action bindings.", formatted)
 
     def test_format_profile_preflight_output_reports_diagnostics_and_skips(self):
         output = json.dumps({
@@ -293,6 +300,7 @@ noise before
             }],
             "voice": {"ok": True, "provider": "dry_run"},
             "question": {"ok": False, "skipped": True, "error": "HTTP endpoint missing."},
+            "next_steps": ["Fix the conversation provider settings, then run Question Test."],
         })
 
         formatted = format_profile_preflight_output(output)
@@ -300,3 +308,4 @@ noise before
         self.assertIn("Preflight found issues.", formatted)
         self.assertIn("Error: HTTP endpoint missing.", formatted)
         self.assertIn("Question: skipped", formatted)
+        self.assertIn("- Fix the conversation provider settings, then run Question Test.", formatted)

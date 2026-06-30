@@ -308,6 +308,15 @@ def format_profile_preflight_output(output: str) -> str:
             lines.append("")
             lines.append(message)
 
+    next_steps = payload.get("next_steps")
+    if isinstance(next_steps, list):
+        clean_steps = [str(item).strip() for item in next_steps if str(item).strip()]
+        if clean_steps:
+            lines.append("")
+            lines.append("Next steps:")
+            for step in clean_steps:
+                lines.append(f"- {step}")
+
     return "\n".join(lines)
 
 

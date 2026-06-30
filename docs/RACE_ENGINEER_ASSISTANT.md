@@ -192,7 +192,8 @@ Current implementation:
   voice output as one end-to-end voice-question path.
 - It also includes a `Preflight` action that runs diagnostics, one voice smoke
   test, and one profile question smoke test from the current form values, then
-  reports a single ready/not-ready summary before the game starts.
+  reports a single ready/not-ready summary plus next steps before the game
+  starts.
 - The `Prompts` settings tab and standalone `--write-agent-prompts-template`
   command can generate an editable JSON template for all advisor categories, so
   custom tyre/fuel/pace/etc prompt tuning starts from the validated default
@@ -219,7 +220,9 @@ Current implementation:
   `--profile-voice-test`, and `--profile-question-test` into one JSON summary
   for terminal checks, automation, or the launcher settings dialog. Its default
   question asks which tyres to fit at the next pit stop, so the smoke test
-  covers the strategy/compound recommendation path.
+  covers the strategy/compound recommendation path. The summary includes a
+  `next_steps` checklist for Azure key setup, voice/question retests, live mic
+  checks, and backend restarts after UDP binding changes.
 - Conversation prompt packages include a radio answer contract: answer in the
   same language as the driver's question, keep it to two short spoken
   sentences, and avoid markdown/bullets. The local fallback applies the same

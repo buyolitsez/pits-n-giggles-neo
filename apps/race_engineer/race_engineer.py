@@ -1319,6 +1319,9 @@ async def run_profile_preflight(
             "voice": {"ok": False, "skipped": True, "error": "profile load failed"},
             "question": {"ok": False, "skipped": True, "error": "profile load failed"},
             "push_to_talk": {"ok": False, "skipped": True, "error": "profile load failed"},
+            "next_steps": [
+                "Open Race Engineer settings, save a valid profile, then run Preflight again.",
+            ],
         }
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return summary
@@ -1370,6 +1373,13 @@ async def run_profile_preflight(
             question_payload = {"ok": False, "skipped": False, "error": str(exc)}
 
     push_to_talk_payload = _preflight_push_to_talk_payload(profile, diagnostics)
+    next_steps = _preflight_next_steps(
+        profile,
+        diagnostics,
+        voice_payload,
+        question_payload,
+        push_to_talk_payload,
+    )
     summary = {
         "ok": (
             not has_diagnostic_errors
@@ -1381,6 +1391,7 @@ async def run_profile_preflight(
         "voice": voice_payload,
         "question": question_payload,
         "push_to_talk": push_to_talk_payload,
+        "next_steps": next_steps,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
@@ -1756,6 +1767,63 @@ def _preflight_push_to_talk_payload(
         "error": f"Unsupported push-to-talk audio source: {audio_source}",
     })
     return payload
+
+
+def _preflight_next_steps(
+    profile: Any,
+    diagnostics: List[RaceEngineerProfileDiagnostic],
+    voice_payload: Dict[str, Any],
+    question_payload: Dict[str, Any],
+    push_to_talk_payload: Dict[str, Any],
+) -> List[str]:
+    """Build short post-preflight actions for launcher users."""
+
+    steps: List[str] = []
+    diagnostic_codes = {item.code for item in diagnostics}
+    if diagnostic_codes:
+        if any(code.startswith("azure-tts") or code.startswith("azure-stt") for code in diagnostic_codes):
+            steps.append(
+                f"Set {profile.azure_key_env_var} to your Azure Speech key, verify endpoint/region, then rerun Preflight."
+            )
+        if any(code.startswith("conversation-") for code in diagnostic_codes):
+            steps.append("Fix the conversation provider settings, then run Question Test.")
+        if "agent-prompts-file-missing" in diagnostic_codes:
+            steps.append("Create or choose an agent prompts JSON file, then rerun Check.")
+        if "udp-action-conflict" in diagnostic_codes:
+            steps.append("Use different UDP action codes for toggle and push-to-talk.")
+        if "ptt-speech-recognition-disabled" in diagnostic_codes:
+            steps.append("Enable Azure speech recognition or clear the push-to-talk UDP action binding.")
+        if "ptt-windows-microphone-platform" in diagnostic_codes:
+            steps.append("Use Windows microphone capture only on Windows, or switch push-to-talk audio to external.")
+
+    if not voice_payload.get("ok", False) and not voice_payload.get("skipped", False):
+        steps.append("Run Voice Test again after fixing Azure voice settings.")
+    if not question_payload.get("ok", False) and not question_payload.get("skipped", False):
+        steps.append("Run Question Test again after fixing the answer provider.")
+
+    if push_to_talk_payload.get("live_test_recommended", False):
+        steps.append("Run Mic PTT Test before driving to verify the real microphone path.")
+    if push_to_talk_payload.get("external_audio_required", False):
+        steps.append("Start the external push-to-talk audio publisher before using the wheel hold binding.")
+    if push_to_talk_payload.get("udp_action_bound", False):
+        steps.append("Restart the backend after changing UDP action bindings.")
+
+    if not steps:
+        steps.append("Start the launcher stack, enable Race Engineer, then drive one out lap to populate live telemetry.")
+
+    return _dedupe_next_steps(steps)
+
+
+def _dedupe_next_steps(steps: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for step in steps:
+        text = str(step or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _speech_result_to_dict(result: SpeechRecognitionResult) -> Dict[str, Any]:

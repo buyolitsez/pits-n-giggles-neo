@@ -627,8 +627,12 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertTrue(summary["push_to_talk"]["ok"])
         self.assertTrue(summary["push_to_talk"]["skipped"])
         self.assertFalse(summary["push_to_talk"]["configured"])
+        self.assertEqual(summary["next_steps"], [
+            "Start the launcher stack, enable Race Engineer, then drive one out lap to populate live telemetry.",
+        ])
         payload = json.loads(print_mock.call_args_list[0].args[0])
         self.assertTrue(payload["ok"])
+        self.assertEqual(payload["next_steps"], summary["next_steps"])
 
     def test_run_profile_preflight_reports_windows_microphone_ptt_readiness(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -666,6 +670,8 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertEqual(summary["push_to_talk"]["audio_source"], "windows_microphone")
         self.assertTrue(summary["push_to_talk"]["live_test_recommended"])
         self.assertFalse(summary["push_to_talk"]["live_tested"])
+        self.assertIn("Run Mic PTT Test before driving to verify the real microphone path.", summary["next_steps"])
+        self.assertIn("Restart the backend after changing UDP action bindings.", summary["next_steps"])
         payload = json.loads(print_mock.call_args_list[0].args[0])
         self.assertEqual(payload["push_to_talk"]["speech_provider"], "azure")
 
@@ -698,6 +704,33 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertTrue(summary["question"]["skipped"])
         codes = {item["code"] for item in summary["diagnostics"]}
         self.assertIn("conversation-http-endpoint-missing", codes)
+        self.assertIn("Fix the conversation provider settings, then run Question Test.", summary["next_steps"])
+
+    def test_run_profile_preflight_reports_load_failure_next_step(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "race_engineer_profile.json")
+            with open(path, "w", encoding="utf-8") as file_obj:
+                file_obj.write("{")
+            args = types.SimpleNamespace(
+                profile_file=path,
+                profile_voice_test="Radio check.",
+                profile_preflight_question="как топливо?",
+                question_snapshot="",
+                debug=False,
+                managed=False,
+                log_file="unused.log",
+            )
+
+            with patch("builtins.print") as print_mock:
+                summary = asyncio.run(run_profile_preflight(args, _SilentLogger()))
+
+        self.assertFalse(summary["ok"])
+        self.assertEqual(summary["diagnostics"][0]["code"], "profile-load-failed")
+        self.assertEqual(summary["next_steps"], [
+            "Open Race Engineer settings, save a valid profile, then run Preflight again.",
+        ])
+        payload = json.loads(print_mock.call_args_list[0].args[0])
+        self.assertEqual(payload["next_steps"], summary["next_steps"])
 
     def test_main_profile_check_returns_before_voice_and_config_setup(self):
         args = types.SimpleNamespace(profile_check=True, profile_file="", wd=None)
