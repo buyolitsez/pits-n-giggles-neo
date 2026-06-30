@@ -675,6 +675,73 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         payload = json.loads(print_mock.call_args_list[0].args[0])
         self.assertEqual(payload["push_to_talk"]["speech_provider"], "azure")
 
+    def test_run_profile_preflight_reports_azure_key_setup_command(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "race_engineer_profile.json")
+            save_race_engineer_launch_profile(
+                RaceEngineerLaunchProfile(
+                    voice_provider="azure",
+                    azure_speech_endpoint="https://francecentral.api.cognitive.microsoft.com/",
+                    azure_key_env_var="PNG_TEST_AZURE_KEY",
+                    conversation_provider="local_brief",
+                ),
+                path,
+            )
+            args = types.SimpleNamespace(
+                profile_file=path,
+                profile_voice_test="Radio check.",
+                profile_preflight_question="как топливо?",
+                question_snapshot="",
+                debug=False,
+                managed=False,
+                log_file="unused.log",
+            )
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch("builtins.print"):
+                    summary = asyncio.run(run_profile_preflight(args, _SilentLogger()))
+
+        self.assertFalse(summary["ok"])
+        self.assertIn(
+            'Set PNG_TEST_AZURE_KEY to your Azure Speech key, then rerun Preflight. '
+            'PowerShell: $env:PNG_TEST_AZURE_KEY = "<Azure Speech key>"',
+            summary["next_steps"],
+        )
+
+    def test_run_profile_preflight_reports_azure_endpoint_setup_hint(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "race_engineer_profile.json")
+            save_race_engineer_launch_profile(
+                RaceEngineerLaunchProfile(
+                    voice_provider="azure",
+                    azure_region="",
+                    azure_speech_endpoint="",
+                    azure_key_env_var="PNG_TEST_AZURE_KEY",
+                    conversation_provider="local_brief",
+                ),
+                path,
+            )
+            args = types.SimpleNamespace(
+                profile_file=path,
+                profile_voice_test="Radio check.",
+                profile_preflight_question="как топливо?",
+                question_snapshot="",
+                debug=False,
+                managed=False,
+                log_file="unused.log",
+            )
+
+            with patch.dict(os.environ, {"PNG_TEST_AZURE_KEY": "secret"}, clear=True):
+                with patch("builtins.print"):
+                    summary = asyncio.run(run_profile_preflight(args, _SilentLogger()))
+
+        self.assertFalse(summary["ok"])
+        self.assertIn(
+            "Paste the Azure endpoint in the Voice tab or set PNG_AZURE_SPEECH_ENDPOINT, "
+            "for example https://francecentral.api.cognitive.microsoft.com/.",
+            summary["next_steps"],
+        )
+
     def test_run_profile_preflight_skips_question_with_blocking_conversation_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = os.path.join(tmp_dir, "race_engineer_profile.json")

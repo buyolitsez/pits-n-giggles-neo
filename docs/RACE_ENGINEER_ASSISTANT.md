@@ -221,8 +221,10 @@ Current implementation:
   for terminal checks, automation, or the launcher settings dialog. Its default
   question asks which tyres to fit at the next pit stop, so the smoke test
   covers the strategy/compound recommendation path. The summary includes a
-  `next_steps` checklist for Azure key setup, voice/question retests, live mic
-  checks, and backend restarts after UDP binding changes.
+  `next_steps` checklist for Azure key setup, endpoint/region setup,
+  voice/question retests, live mic checks, and backend restarts after UDP
+  binding changes. Azure key hints include a PowerShell env-var assignment with
+  a placeholder, not the secret value.
 - Conversation prompt packages include a radio answer contract: answer in the
   same language as the driver's question, keep it to two short spoken
   sentences, and avoid markdown/bullets. The local fallback applies the same

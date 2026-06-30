@@ -115,9 +115,11 @@ STT -> answer -> voice pipeline, so the real push-to-talk audio chain can be
 checked before driving. `Preflight` combines diagnostics, one voice smoke test,
 one profile question smoke test, and a push-to-talk readiness report into a
 single ready/not-ready result with next steps such as setting the Azure key,
-running `Mic PTT Test`, or restarting the backend after UDP binding changes. It
-does not record the microphone by surprise; for that live recording check use
-`Mic PTT Test`.
+running `Mic PTT Test`, or restarting the backend after UDP binding changes.
+For a missing Azure key, the next step includes the exact PowerShell env-var
+assignment with a placeholder instead of printing or storing the secret. It does
+not record the microphone by surprise; for that live recording check use `Mic
+PTT Test`.
 
 The `Prompts` tab can create an editable JSON template with every advisor
 category and the current default prompt contract. Edit only the category fields

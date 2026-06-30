@@ -1781,9 +1781,12 @@ def _preflight_next_steps(
     steps: List[str] = []
     diagnostic_codes = {item.code for item in diagnostics}
     if diagnostic_codes:
-        if any(code.startswith("azure-tts") or code.startswith("azure-stt") for code in diagnostic_codes):
+        if any(code in diagnostic_codes for code in ("azure-tts-key-missing", "azure-stt-key-missing")):
+            steps.append(_azure_key_next_step(profile.azure_key_env_var))
+        if any(code in diagnostic_codes for code in ("azure-tts-location", "azure-stt-location")):
             steps.append(
-                f"Set {profile.azure_key_env_var} to your Azure Speech key, verify endpoint/region, then rerun Preflight."
+                "Paste the Azure endpoint in the Voice tab or set PNG_AZURE_SPEECH_ENDPOINT, "
+                "for example https://francecentral.api.cognitive.microsoft.com/."
             )
         if any(code.startswith("conversation-") for code in diagnostic_codes):
             steps.append("Fix the conversation provider settings, then run Question Test.")
@@ -1812,6 +1815,14 @@ def _preflight_next_steps(
         steps.append("Start the launcher stack, enable Race Engineer, then drive one out lap to populate live telemetry.")
 
     return _dedupe_next_steps(steps)
+
+
+def _azure_key_next_step(env_var_name: str) -> str:
+    name = str(env_var_name or DEFAULT_AZURE_SPEECH_KEY_ENV_VAR).strip() or DEFAULT_AZURE_SPEECH_KEY_ENV_VAR
+    return (
+        f"Set {name} to your Azure Speech key, then rerun Preflight. "
+        f"PowerShell: $env:{name} = \"<Azure Speech key>\""
+    )
 
 
 def _dedupe_next_steps(steps: List[str]) -> List[str]:
