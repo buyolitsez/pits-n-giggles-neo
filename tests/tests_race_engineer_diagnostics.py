@@ -197,6 +197,21 @@ class TestRaceEngineerProfileDiagnostics(unittest.TestCase):
         self.assertEqual(_codes(diagnostics), ["agent-prompts-file-invalid"])
         self.assertIn("Unknown race engineer prompt category", diagnostics[0].message)
 
+    def test_memory_file_must_be_valid_json_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "race-engineer-memory.json"
+            path.write_text("{", encoding="utf-8")
+            diagnostics = diagnose_race_engineer_launch_profile(
+                RaceEngineerLaunchProfile(memory_file=str(path)),
+            )
+
+        self.assertEqual(_codes(diagnostics), ["memory-file-invalid"])
+        self.assertTrue(race_engineer_profile_has_errors(diagnostics))
+        self.assertIn(
+            "Fix the Race Engineer memory JSON file or create a fresh template from the Questions tab.",
+            race_engineer_profile_diagnostic_next_steps(RaceEngineerLaunchProfile(), diagnostics),
+        )
+
     def test_udp_action_conflict_is_reported(self):
         diagnostics = diagnose_race_engineer_launch_profile(
             RaceEngineerLaunchProfile(

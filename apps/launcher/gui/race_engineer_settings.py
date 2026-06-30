@@ -22,11 +22,12 @@
 
 # -------------------------------------- IMPORTS -----------------------------------------------------------------------
 
+from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QProcess, Qt
+from PySide6.QtCore import QProcess, Qt, QUrl
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -62,11 +63,13 @@ from apps.race_engineer.profile_voice_test import (
 )
 from lib.race_engineer import (
     RaceEngineerLaunchProfile,
+    default_race_engineer_memory_path,
     diagnose_race_engineer_launch_profile,
     format_race_engineer_profile_diagnostics,
     race_engineer_profile_diagnostic_next_steps,
     race_engineer_profile_has_errors,
     save_agent_prompt_override_template,
+    save_race_engineer_memory_template,
     save_race_engineer_launch_profile,
 )
 
@@ -255,12 +258,29 @@ class RaceEngineerSettingsDialog(QDialog):
         self.conversation_key_env_var = QLineEdit()
         self.conversation_command = QLineEdit()
         self.conversation_timeout_seconds = _double_spin(0.1, 120.0, 1)
+        self.memory_file = QLineEdit()
+        memory_browse = QPushButton("Browse")
+        memory_browse.clicked.connect(self._browse_memory_file)
+        memory_create = QPushButton("Create")
+        memory_create.clicked.connect(self._create_memory_template)
+        memory_open = QPushButton("Open")
+        memory_open.clicked.connect(self._open_memory_file)
+        memory_row = QWidget()
+        memory_layout = QHBoxLayout()
+        memory_layout.setContentsMargins(0, 0, 0, 0)
+        memory_layout.setSpacing(6)
+        memory_layout.addWidget(self.memory_file, stretch=1)
+        memory_layout.addWidget(memory_browse)
+        memory_layout.addWidget(memory_create)
+        memory_layout.addWidget(memory_open)
+        memory_row.setLayout(memory_layout)
 
         form.addRow("Answer provider", self.conversation_provider)
         form.addRow("HTTP endpoint", self.conversation_endpoint)
         form.addRow("HTTP key env var", self.conversation_key_env_var)
         form.addRow("CLI command", self.conversation_command)
         form.addRow("Answer timeout seconds", self.conversation_timeout_seconds)
+        form.addRow("Memory JSON", memory_row)
         return tab
 
     def _build_prompts_tab(self) -> QWidget:
@@ -334,6 +354,7 @@ class RaceEngineerSettingsDialog(QDialog):
         self.conversation_key_env_var.setText(profile.conversation_key_env_var)
         self.conversation_command.setText(profile.conversation_command)
         self.conversation_timeout_seconds.setValue(profile.conversation_timeout_seconds)
+        self.memory_file.setText(profile.memory_file)
 
         self.agent_prompts_file.setText(profile.agent_prompts_file)
         _set_udp_spin(self.race_engineer_toggle_udp_action_code, profile.race_engineer_toggle_udp_action_code)
@@ -369,10 +390,61 @@ class RaceEngineerSettingsDialog(QDialog):
             conversation_command=self.conversation_command.text().strip(),
             conversation_timeout_seconds=self.conversation_timeout_seconds.value(),
             agent_prompts_file=self.agent_prompts_file.text().strip(),
+            memory_file=self.memory_file.text().strip(),
             race_engineer_toggle_udp_action_code=_udp_spin_value(self.race_engineer_toggle_udp_action_code),
             race_engineer_push_to_talk_udp_action_code=_udp_spin_value(
                 self.race_engineer_push_to_talk_udp_action_code),
         )
+
+    def _browse_memory_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Race Engineer memory JSON",
+            self.memory_file.text().strip() or default_race_engineer_memory_path(),
+            "JSON files (*.json);;All files (*.*)",
+        )
+        if path:
+            self.memory_file.setText(path)
+
+    def _create_memory_template(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create Race Engineer memory",
+            self.memory_file.text().strip() or default_race_engineer_memory_path(),
+            "JSON files (*.json);;All files (*.*)",
+        )
+        if not path:
+            return
+        try:
+            saved_path = save_race_engineer_memory_template(path, overwrite=True)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Memory Template Error",
+                f"Could not create Race Engineer memory file:\n{exc}",
+            )
+            return
+        self.memory_file.setText(saved_path)
+        QMessageBox.information(
+            self,
+            "Memory Created",
+            "Race Engineer memory JSON created. You can edit it by hand or calibrate by voice.",
+        )
+
+    def _open_memory_file(self) -> None:
+        path = self.memory_file.text().strip() or default_race_engineer_memory_path()
+        try:
+            if not Path(path).exists():
+                save_race_engineer_memory_template(path, overwrite=False)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Memory Open Error",
+                f"Could not prepare Race Engineer memory file:\n{exc}",
+            )
+            return
+        self.memory_file.setText(path)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).resolve())))
 
     def _browse_agent_prompts(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

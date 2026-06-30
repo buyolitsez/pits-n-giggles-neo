@@ -24,7 +24,9 @@
 
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from lib.race_engineer import (
@@ -36,11 +38,15 @@ from lib.race_engineer import (
     HttpConversationConfig,
     HttpConversationResponse,
     LocalBriefConversationAgent,
+    MemoryConversationAgent,
+    RaceEngineerMemory,
     build_http_conversation_headers,
     build_codex_conversation_prompt_package,
     build_race_engineer_brief,
     infer_question_focus,
+    load_race_engineer_memory,
     parse_conversation_command,
+    save_race_engineer_memory,
 )
 from tests.tests_mcp_race_engineer_brief import _player_tyre_sets, _snapshot
 
@@ -170,6 +176,35 @@ class TestRaceEngineerConversation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(package.context["advice"])
         self.assertEqual(package.context["advice"][0]["category"], "weather")
 
+    def test_codex_prompt_package_includes_driver_memory(self):
+        brief = build_race_engineer_brief(
+            telemetry_update=_snapshot(),
+            base_rsp={"available": False, "connected": True, "ok": False},
+            focus="fuel",
+            max_items=5,
+        )
+
+        package = build_codex_conversation_prompt_package(
+            "how is fuel?",
+            brief=brief,
+            memory=RaceEngineerMemory(
+                language_preference="ru",
+                verbosity="concise",
+                max_sentences=1,
+                max_chars=90,
+                avoid_repeating=True,
+                style_notes=("Keep it short.",),
+            ),
+        )
+
+        self.assertEqual(package.context["driver_memory"]["language_preference"], "ru")
+        self.assertEqual(package.context["driver_memory"]["verbosity"], "concise")
+        self.assertEqual(package.context["answer_contract"]["language"], "ru")
+        self.assertEqual(package.context["answer_contract"]["max_sentences"], 1)
+        self.assertEqual(package.context["answer_contract"]["max_chars"], 90)
+        self.assertFalse(package.context["answer_contract"]["same_language_as_question"])
+        self.assertIn("driver_memory", package.messages[0]["content"])
+
     def test_codex_prompt_package_does_not_include_raw_telemetry_snapshot(self):
         brief = build_race_engineer_brief(
             telemetry_update=_snapshot(),
@@ -282,6 +317,43 @@ class TestRaceEngineerConversation(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(answer.ok)
         self.assertEqual(answer.answer, "Fuel is critical. Lift and coast now.")
+
+    async def test_local_answer_uses_memory_limits(self):
+        snapshot = _snapshot()
+        snapshot["table-entries"][1]["fuel-info"]["surplus-laps-png"] = -0.65
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "race_engineer_memory.json"
+            save_race_engineer_memory(
+                RaceEngineerMemory(verbosity="concise", max_sentences=1, max_chars=90),
+                str(path),
+            )
+            agent = LocalBriefConversationAgent(memory_file=str(path))
+
+            answer = await agent.answer("как у меня с топливом?", telemetry_update=snapshot)
+
+        self.assertTrue(answer.ok)
+        self.assertEqual(answer.answer, "Топливо критично: минус 0.7 круга.")
+        self.assertTrue(answer.metrics["memory_preferences"])
+        self.assertEqual(answer.metrics["memory_verbosity"], "concise")
+
+    async def test_memory_agent_updates_memory_instead_of_answering_again(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "race_engineer_memory.json"
+            base_agent = LocalBriefConversationAgent(memory_file=str(path))
+            agent = MemoryConversationAgent(base_agent, memory_file=str(path))
+
+            answer = await agent.answer(
+                "запомни, не говори так много информации",
+                telemetry_update=_snapshot(),
+            )
+            memory = load_race_engineer_memory(str(path))
+
+        self.assertTrue(answer.ok)
+        self.assertEqual(answer.source, "memory")
+        self.assertEqual(answer.focus, "memory")
+        self.assertEqual(answer.answer, "Запомнил. Дальше короче.")
+        self.assertEqual(memory.verbosity, "concise")
+        self.assertEqual(memory.max_sentences, 1)
 
     async def test_fallback_conversation_agent_uses_local_answer_after_http_error(self):
         client = _FakeHttpConversationClient(

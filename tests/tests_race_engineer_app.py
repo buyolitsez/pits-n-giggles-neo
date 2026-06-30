@@ -58,6 +58,7 @@ from lib.race_engineer import (
     CodexCliConversationAgent,
     FallbackConversationAgent,
     LocalBriefConversationAgent,
+    MemoryConversationAgent,
     MicrophoneCaptureConfig,
     NullVoiceEngine,
     RaceEngineerLaunchProfile,
@@ -89,6 +90,7 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
                 "PNG_RACE_ENGINEER_CONVERSATION_KEY_ENV_VAR": "PNG_CODEX_PROXY_KEY",
                 "PNG_RACE_ENGINEER_CONVERSATION_COMMAND": "codex exec",
                 "PNG_RACE_ENGINEER_CONVERSATION_TIMEOUT_SECONDS": "3.5",
+                "PNG_RACE_ENGINEER_MEMORY_FILE": "C:\\temp\\race-engineer-memory.json",
                 "PNG_AZURE_SPEECH_REGION": "westeurope",
                 "PNG_AZURE_SPEECH_ENDPOINT": "https://francecentral.api.cognitive.microsoft.com/",
                 "PNG_AZURE_SPEECH_VOICE": "en-US-GuyNeural",
@@ -117,6 +119,7 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertEqual(args.conversation_key_env_var, "PNG_CODEX_PROXY_KEY")
         self.assertEqual(args.conversation_command, "codex exec")
         self.assertEqual(args.conversation_timeout_seconds, 3.5)
+        self.assertEqual(args.memory_file, "C:\\temp\\race-engineer-memory.json")
         self.assertEqual(args.azure_region, "westeurope")
         self.assertEqual(args.azure_speech_endpoint, "https://francecentral.api.cognitive.microsoft.com/")
         self.assertEqual(args.azure_voice, "en-US-GuyNeural")
@@ -362,6 +365,17 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         agent = build_conversation_agent(args, _SilentLogger(), {})
 
         self.assertIsInstance(agent, LocalBriefConversationAgent)
+
+    def test_build_conversation_agent_wraps_memory_when_configured(self):
+        args = types.SimpleNamespace(
+            conversation_provider="local_brief",
+            memory_file="C:\\temp\\race-engineer-memory.json",
+        )
+
+        agent = build_conversation_agent(args, _SilentLogger(), {})
+
+        self.assertIsInstance(agent, MemoryConversationAgent)
+        self.assertIsInstance(agent.wrapped, LocalBriefConversationAgent)
 
     def test_build_speech_recognizer_disables_unknown_provider(self):
         args = types.SimpleNamespace(speech_recognition_provider="mystery")

@@ -179,9 +179,10 @@ Current implementation:
 - The settings dialog includes an offline `Check` action that validates the
   launch profile without revealing secrets or contacting Azure: it checks Azure
   location and key env-var presence, STT/PTT compatibility, Codex CLI command
-  configuration, prompt file paths, prompt JSON schema/category validity, and
-  UDP action conflicts. It shows the same diagnostic next-step hints as
-  `Preflight`, including persistent User-scope Azure key setup.
+  configuration, prompt file paths, prompt JSON schema/category validity, memory
+  JSON validity, and UDP action conflicts. It shows the same diagnostic
+  next-step hints as `Preflight`, including persistent User-scope Azure key
+  setup.
 - The same settings dialog includes a `Voice Test` action that runs
   `--profile-voice-test` from the current form values through a temporary
   profile, so Azure TTS can be verified before saving or starting telemetry.
@@ -200,6 +201,10 @@ Current implementation:
   command can generate an editable JSON template for all advisor categories, so
   custom tyre/fuel/pace/etc prompt tuning starts from the validated default
   contracts instead of hand-written field names.
+- The `Questions` settings tab stores a `Memory JSON` path. The assistant can
+  update this editable memory from spoken driver calibration such as "speak
+  shorter", "do not repeat", or "answer in Russian"; future local, HTTP, and
+  `codex_cli` answers receive those style preferences before speaking.
 - The standalone process also supports `--profile-check`, so the same offline
   launch-profile diagnostics can run from a terminal or automation before the
   game/launcher stack starts.
@@ -228,10 +233,10 @@ Current implementation:
   binding changes. Azure key hints include a User-scope PowerShell env-var
   assignment with a placeholder, not the secret value, so the desktop launcher
   can read the key after restart.
-- Conversation prompt packages include a radio answer contract: answer in the
-  same language as the driver's question, keep it to two short spoken
-  sentences, and avoid markdown/bullets. The local fallback applies the same
-  short-answer formatting.
+- Conversation prompt packages include driver memory and a radio answer
+  contract: answer in the remembered language or the same language as the
+  driver's question, keep to the remembered spoken length, and avoid
+  markdown/bullets. The local fallback applies the same short-answer formatting.
 
 ## Phase 3: Proactive Event Loop
 

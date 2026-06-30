@@ -34,6 +34,15 @@ import urllib.request
 
 from .agent_prompts import ADVICE_CATEGORIES, CATEGORY_ALL, normalise_agent_focus
 from .brief import build_race_engineer_brief
+from .memory import (
+    RaceEngineerMemory,
+    apply_race_engineer_memory_feedback,
+    load_race_engineer_memory,
+    race_engineer_memory_answer_limits,
+    race_engineer_memory_has_preferences,
+    race_engineer_memory_to_prompt_context,
+    save_race_engineer_memory,
+)
 
 # -------------------------------------- CONSTANTS ---------------------------------------------------------------------
 
@@ -277,8 +286,10 @@ class LocalBriefConversationAgent:
         self,
         *,
         agent_prompt_overrides: Optional[Dict[str, Dict[str, str]]] = None,
+        memory_file: str = "",
     ) -> None:
         self.agent_prompt_overrides = agent_prompt_overrides or {}
+        self.memory_file = memory_file
 
     async def answer(
         self,
@@ -304,6 +315,7 @@ class LocalBriefConversationAgent:
                 error="missing telemetry",
             )
 
+        memory = _load_memory_or_default(self.memory_file)
         focus = infer_question_focus(question)
         brief = build_race_engineer_brief(
             telemetry_update=telemetry_update,
@@ -327,12 +339,14 @@ class LocalBriefConversationAgent:
             question,
             brief=brief,
             focus=focus,
+            memory=memory,
         )
         if advice:
-            answer = _answer_from_advice(advice[0], question=question)
+            answer = _answer_from_advice(advice[0], question=question, memory=memory)
         else:
-            answer = _answer_from_context(brief, focus, question=question)
+            answer = _answer_from_context(brief, focus, question=question, memory=memory)
 
+        memory_context = race_engineer_memory_to_prompt_context(memory)
         return RaceEngineerAnswer(
             ok=True,
             question=question,
@@ -345,6 +359,8 @@ class LocalBriefConversationAgent:
                 "focus": focus,
                 "codex_prompt_focus": prompt_package.focus,
                 "codex_prompt_context_keys": sorted(prompt_package.context.keys()),
+                "memory_preferences": race_engineer_memory_has_preferences(memory),
+                "memory_verbosity": memory_context.get("verbosity"),
                 "codex_prompt_advice_ids": [
                     item.get("id")
                     for item in prompt_package.context.get("advice", [])
@@ -363,11 +379,13 @@ class HttpConversationAgent:
         *,
         client: Optional[HttpConversationClient] = None,
         agent_prompt_overrides: Optional[Dict[str, Dict[str, str]]] = None,
+        memory_file: str = "",
     ) -> None:
         self.config = config
         self.source = config.provider_name
         self.client = client or AioHttpConversationClient()
         self.agent_prompt_overrides = agent_prompt_overrides or {}
+        self.memory_file = memory_file
 
     async def answer(
         self,
@@ -393,6 +411,7 @@ class HttpConversationAgent:
                 metrics={"duration_ms": _elapsed_ms(started_at)},
             )
 
+        memory = _load_memory_or_default(self.memory_file)
         focus = infer_question_focus(question)
         brief = build_race_engineer_brief(
             telemetry_update=telemetry_update,
@@ -416,6 +435,7 @@ class HttpConversationAgent:
             question,
             brief=brief,
             focus=focus,
+            memory=memory,
         )
         payload = {
             **prompt_package.as_dict(),
@@ -449,6 +469,7 @@ class HttpConversationAgent:
             focus=focus,
             source=self.source,
             duration_ms=_elapsed_ms(started_at),
+            memory=memory,
         )
 
     def _validate(self) -> Optional[str]:
@@ -468,11 +489,13 @@ class CodexCliConversationAgent:
         *,
         runner: Optional[CommandConversationRunner] = None,
         agent_prompt_overrides: Optional[Dict[str, Dict[str, str]]] = None,
+        memory_file: str = "",
     ) -> None:
         self.config = config
         self.source = config.provider_name
         self.runner = runner or AsyncioCommandConversationRunner()
         self.agent_prompt_overrides = agent_prompt_overrides or {}
+        self.memory_file = memory_file
 
     async def answer(
         self,
@@ -507,6 +530,7 @@ class CodexCliConversationAgent:
                 metrics={"duration_ms": _elapsed_ms(started_at)},
             )
 
+        memory = _load_memory_or_default(self.memory_file)
         focus = infer_question_focus(question)
         brief = build_race_engineer_brief(
             telemetry_update=telemetry_update,
@@ -530,6 +554,7 @@ class CodexCliConversationAgent:
             question,
             brief=brief,
             focus=focus,
+            memory=memory,
         )
         payload = {
             **prompt_package.as_dict(),
@@ -564,6 +589,7 @@ class CodexCliConversationAgent:
             focus=focus,
             source=self.source,
             duration_ms=_elapsed_ms(started_at),
+            memory=memory,
         )
 
 
@@ -606,6 +632,61 @@ class FallbackConversationAgent:
         )
 
 
+class MemoryConversationAgent:
+    """Persist driver calibration feedback before normal question answering."""
+
+    source = "memory"
+
+    def __init__(
+        self,
+        wrapped: RaceEngineerConversationAgent,
+        *,
+        memory_file: str,
+    ) -> None:
+        self.wrapped = wrapped
+        self.memory_file = memory_file
+
+    async def answer(
+        self,
+        question: str,
+        *,
+        telemetry_update: Optional[Dict[str, Any]] = None,
+    ) -> RaceEngineerAnswer:
+        question = _clean_question(question)
+        if not question:
+            return await self.wrapped.answer(question, telemetry_update=telemetry_update)
+        try:
+            memory = load_race_engineer_memory(self.memory_file)
+            update = apply_race_engineer_memory_feedback(memory, question)
+            if not update.applied:
+                return await self.wrapped.answer(question, telemetry_update=telemetry_update)
+            save_race_engineer_memory(update.memory, self.memory_file)
+            return RaceEngineerAnswer(
+                ok=True,
+                question=question,
+                answer=update.acknowledgement,
+                source=self.source,
+                focus="memory",
+                metrics={
+                    "memory_updated": True,
+                    "memory_file": self.memory_file,
+                    "rules": list(update.rules),
+                    "verbosity": update.memory.verbosity,
+                    "max_sentences": update.memory.max_sentences,
+                    "max_chars": update.memory.max_chars,
+                },
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            return RaceEngineerAnswer(
+                ok=False,
+                question=question,
+                answer="I could not update race engineer memory.",
+                source=self.source,
+                focus="memory",
+                error=str(exc),
+            )
+
+
 # -------------------------------------- FUNCTIONS ---------------------------------------------------------------------
 
 
@@ -622,6 +703,13 @@ def infer_question_focus(question: str) -> str:
     return CATEGORY_ALL
 
 
+def _load_memory_or_default(memory_file: str) -> RaceEngineerMemory:
+    try:
+        return load_race_engineer_memory(memory_file)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return RaceEngineerMemory()
+
+
 def _is_tyre_strategy_question(normalised_question: str) -> bool:
     return (
         any(term in normalised_question for term in _TYRE_STRATEGY_TERMS)
@@ -634,6 +722,7 @@ def build_codex_conversation_prompt_package(
     *,
     brief: Dict[str, Any],
     focus: Optional[str] = None,
+    memory: Optional[RaceEngineerMemory] = None,
 ) -> CodexConversationPromptPackage:
     """Build the compact context a Codex-backed answer provider should receive."""
 
@@ -641,8 +730,10 @@ def build_codex_conversation_prompt_package(
     selected_focus = focus or infer_question_focus(clean_question)
     selected_focus = normalise_agent_focus(selected_focus)
     context = _compact_brief_context(brief, selected_focus)
-    context["answer_contract"] = _answer_contract(clean_question)
+    context["driver_memory"] = race_engineer_memory_to_prompt_context(memory)
+    context["answer_contract"] = _answer_contract(clean_question, memory=memory)
     context_json = json.dumps(context, ensure_ascii=False, sort_keys=True)
+    max_sentences, max_chars = race_engineer_memory_answer_limits(memory)
     messages = [
         {
             "role": "system",
@@ -650,9 +741,10 @@ def build_codex_conversation_prompt_package(
                 "You are the in-race Pits n' Giggles race engineer. "
                 "Answer the driver's question from the supplied compact telemetry context only. "
                 "Do not invent lap times, gaps, tyre state, damage, weather, strategy, or setup facts. "
-                "Answer in the same language as the driver's question. "
-                f"Use race-radio style: maximum {RADIO_ANSWER_MAX_SENTENCES} short sentences, "
-                f"maximum {RADIO_ANSWER_MAX_CHARS} characters, no markdown, no bullets. "
+                "Follow driver_memory style preferences unless safety-critical evidence requires otherwise. "
+                "Answer in the same language as the driver's question unless driver_memory sets a language. "
+                f"Use race-radio style: maximum {max_sentences} short sentences, "
+                f"maximum {max_chars} characters, no markdown, no bullets. "
                 "If evidence is missing, say that the call is not reliable yet."
             ),
         },
@@ -695,26 +787,37 @@ def parse_conversation_command(command: str) -> List[str]:
     return [part.strip("\"'") for part in shlex.split(command, posix=False) if part.strip("\"'")]
 
 
-def _answer_from_advice(advice: Dict[str, Any], *, question: str = "") -> str:
-    if _question_language(question) == "ru":
+def _answer_from_advice(
+    advice: Dict[str, Any],
+    *,
+    question: str = "",
+    memory: Optional[RaceEngineerMemory] = None,
+) -> str:
+    if _answer_language(question, memory) == "ru":
         russian = _russian_answer_from_advice(advice)
         if russian:
-            return _normalise_radio_answer(russian)
+            return _normalise_radio_answer(russian, memory=memory)
 
     voice = _safe_text(advice.get("voice_callout"))
     if voice:
-        return _normalise_radio_answer(voice)
+        return _normalise_radio_answer(voice, memory=memory)
     message = _safe_text(advice.get("message"))
     if message:
-        return _normalise_radio_answer(message)
+        return _normalise_radio_answer(message, memory=memory)
     title = _safe_text(advice.get("title"))
     if title:
-        return _normalise_radio_answer(title)
+        return _normalise_radio_answer(title, memory=memory)
     return "No clear call right now."
 
 
-def _answer_from_context(brief: Dict[str, Any], focus: str, *, question: str = "") -> str:
-    if _question_language(question) == "ru":
+def _answer_from_context(
+    brief: Dict[str, Any],
+    focus: str,
+    *,
+    question: str = "",
+    memory: Optional[RaceEngineerMemory] = None,
+) -> str:
+    if _answer_language(question, memory) == "ru":
         return "Срочного сигнала нет. Держи ритм."
 
     categories = (
@@ -728,7 +831,7 @@ def _answer_from_context(brief: Dict[str, Any], focus: str, *, question: str = "
 
     facts = context.get("facts") if isinstance(context, dict) else None
     if isinstance(facts, list) and facts:
-        return _normalise_radio_answer(_safe_text(facts[0]) or "No urgent call right now.")
+        return _normalise_radio_answer(_safe_text(facts[0]) or "No urgent call right now.", memory=memory)
     return "No urgent call right now."
 
 
@@ -775,13 +878,18 @@ def _compact_brief_context(brief: Dict[str, Any], focus: str) -> Dict[str, Any]:
     return context
 
 
-def _answer_contract(question: str) -> Dict[str, Any]:
+def _answer_contract(question: str, *, memory: Optional[RaceEngineerMemory] = None) -> Dict[str, Any]:
+    max_sentences, max_chars = race_engineer_memory_answer_limits(memory)
+    language = _answer_language(question, memory)
+    memory_context = race_engineer_memory_to_prompt_context(memory)
     return {
         "style": "race-radio",
-        "language": _question_language(question),
-        "same_language_as_question": True,
-        "max_sentences": RADIO_ANSWER_MAX_SENTENCES,
-        "max_chars": RADIO_ANSWER_MAX_CHARS,
+        "language": language,
+        "same_language_as_question": not bool(memory_context.get("language_preference")),
+        "max_sentences": max_sentences,
+        "max_chars": max_chars,
+        "avoid_repeating": bool(memory_context.get("avoid_repeating")),
+        "avoid_phrases": list(memory_context.get("avoid_phrases") or []),
         "no_markdown": True,
         "no_bullets": True,
     }
@@ -839,18 +947,37 @@ def _question_language(question: str) -> str:
     return "ru" if any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in str(question or "")) else "en"
 
 
-def _normalise_radio_answer(text: str) -> str:
+def _answer_language(question: str, memory: Optional[RaceEngineerMemory] = None) -> str:
+    if memory is not None and memory.language_preference in {"ru", "en"}:
+        return memory.language_preference
+    return _question_language(question)
+
+
+def _normalise_radio_answer(text: str, *, memory: Optional[RaceEngineerMemory] = None) -> str:
+    max_sentences, max_chars = race_engineer_memory_answer_limits(memory)
     answer = " ".join(str(text or "").replace("\r", " ").replace("\n", " ").split()).strip()
     while answer.startswith(("-", "*", "•")):
         answer = answer[1:].strip()
-    answer = _limit_sentences(answer, RADIO_ANSWER_MAX_SENTENCES)
-    if len(answer) > RADIO_ANSWER_MAX_CHARS:
-        answer = answer[:RADIO_ANSWER_MAX_CHARS].rstrip(" ,;:")
+    answer = _remove_avoided_phrases(answer, memory)
+    answer = _limit_sentences(answer, max_sentences)
+    if len(answer) > max_chars:
+        answer = answer[:max_chars].rstrip(" ,;:")
         if "." in answer:
             answer = answer.rsplit(".", 1)[0].strip() or answer
         if not answer.endswith((".", "!", "?")):
             answer += "."
     return answer or "No clear call right now."
+
+
+def _remove_avoided_phrases(text: str, memory: Optional[RaceEngineerMemory]) -> str:
+    if memory is None or not memory.avoid_phrases:
+        return text
+    answer = text
+    for phrase in memory.avoid_phrases:
+        phrase_text = _safe_text(phrase)
+        if phrase_text:
+            answer = answer.replace(phrase_text, "").replace("  ", " ").strip(" ,;:-")
+    return answer.strip()
 
 
 def _limit_sentences(text: str, max_sentences: int) -> str:
@@ -991,6 +1118,7 @@ def _answer_from_http_conversation_response(
     focus: str,
     source: str,
     duration_ms: float,
+    memory: Optional[RaceEngineerMemory] = None,
 ) -> RaceEngineerAnswer:
     if response.status_code not in {200, 201}:
         return RaceEngineerAnswer(
@@ -1037,7 +1165,7 @@ def _answer_from_http_conversation_response(
             },
         )
 
-    answer = _normalise_radio_answer(answer_text)
+    answer = _normalise_radio_answer(answer_text, memory=memory)
     payload_metrics = payload.get("metrics") if isinstance(payload, dict) else None
     return RaceEngineerAnswer(
         ok=True,
@@ -1060,6 +1188,7 @@ def _answer_from_command_conversation_response(
     focus: str,
     source: str,
     duration_ms: float,
+    memory: Optional[RaceEngineerMemory] = None,
 ) -> RaceEngineerAnswer:
     if response.timed_out:
         return RaceEngineerAnswer(
@@ -1104,7 +1233,7 @@ def _answer_from_command_conversation_response(
         )
 
     payload_metrics: Dict[str, Any] = {}
-    answer = _normalise_radio_answer(text)
+    answer = _normalise_radio_answer(text, memory=memory)
     answer_focus = focus
     try:
         payload = json.loads(text)
@@ -1125,7 +1254,7 @@ def _answer_from_command_conversation_response(
                     "exit_code": response.exit_code,
                 },
             )
-        answer = _normalise_radio_answer(parsed_answer)
+        answer = _normalise_radio_answer(parsed_answer, memory=memory)
         payload_focus = _safe_text(payload.get("focus"))
         if payload_focus:
             answer_focus = payload_focus

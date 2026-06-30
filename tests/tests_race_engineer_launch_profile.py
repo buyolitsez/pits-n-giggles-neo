@@ -49,6 +49,7 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
             "voice_provider": "azure",
             "azure_key_env_var": "not a valid env var",
             "conversation_provider": "codex",
+            "memory_file": "C:\\temp\\race-engineer-memory.json",
             "race_engineer_toggle_udp_action_code": 4,
             "race_engineer_push_to_talk_udp_action_code": 4,
         })
@@ -60,6 +61,7 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
         self.assertEqual(profile.voice_provider, "azure")
         self.assertEqual(profile.azure_key_env_var, "PNG_AZURE_SPEECH_KEY")
         self.assertEqual(profile.conversation_provider, "local_brief")
+        self.assertEqual(profile.memory_file, "C:\\temp\\race-engineer-memory.json")
         self.assertEqual(profile.race_engineer_toggle_udp_action_code, 4)
         self.assertIsNone(profile.race_engineer_push_to_talk_udp_action_code)
 
@@ -95,6 +97,7 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
             conversation_command="codex exec --json",
             conversation_key_env_var="PNG_CODEX_PROXY_KEY",
             agent_prompts_file="C:\\temp\\prompts.json",
+            memory_file="C:\\temp\\memory.json",
             no_audio_playback=True,
         )
 
@@ -109,6 +112,7 @@ class TestRaceEngineerLaunchProfile(unittest.TestCase):
         self.assertEqual(args[args.index("--conversation-command") + 1], "codex exec --json")
         self.assertEqual(args[args.index("--conversation-key-env-var") + 1], "PNG_CODEX_PROXY_KEY")
         self.assertEqual(args[args.index("--agent-prompts-file") + 1], "C:\\temp\\prompts.json")
+        self.assertEqual(args[args.index("--memory-file") + 1], "C:\\temp\\memory.json")
         self.assertIn("--no-audio-playback", args)
 
     def test_codex_cli_provider_survives_profile_normalisation(self):

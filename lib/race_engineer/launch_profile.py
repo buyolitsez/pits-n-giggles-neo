@@ -36,6 +36,7 @@ from .azure_voice import (
     DEFAULT_AZURE_SPEECH_OUTPUT_FORMAT,
     DEFAULT_AZURE_SPEECH_VOICE,
 )
+from .memory import DEFAULT_RACE_ENGINEER_MEMORY_FILE
 from .speech_recognition import DEFAULT_AZURE_STT_CONTENT_TYPE, DEFAULT_AZURE_STT_FORMAT, DEFAULT_AZURE_STT_LANGUAGE
 
 # -------------------------------------- CONSTANTS ---------------------------------------------------------------------
@@ -87,6 +88,7 @@ class RaceEngineerLaunchProfile:
     conversation_timeout_seconds: float = 10.0
 
     agent_prompts_file: str = ""
+    memory_file: str = DEFAULT_RACE_ENGINEER_MEMORY_FILE
     race_engineer_toggle_udp_action_code: Optional[int] = None
     race_engineer_push_to_talk_udp_action_code: Optional[int] = None
 
@@ -178,6 +180,7 @@ def race_engineer_launch_profile_from_dict(value: Any) -> RaceEngineerLaunchProf
         conversation_timeout_seconds=_bounded_float(
             data["conversation_timeout_seconds"], 0.1, 120.0, defaults.conversation_timeout_seconds),
         agent_prompts_file=_text(data["agent_prompts_file"]),
+        memory_file=_text(data["memory_file"]) or defaults.memory_file,
         race_engineer_toggle_udp_action_code=_udp_action_code(data["race_engineer_toggle_udp_action_code"]),
         race_engineer_push_to_talk_udp_action_code=_udp_action_code(
             data["race_engineer_push_to_talk_udp_action_code"]),
@@ -222,6 +225,7 @@ def race_engineer_launch_profile_to_cli_args(profile: RaceEngineerLaunchProfile)
         "--conversation-command", profile.conversation_command,
         "--conversation-timeout-seconds", str(profile.conversation_timeout_seconds),
         "--agent-prompts-file", profile.agent_prompts_file,
+        "--memory-file", profile.memory_file,
     ]
     if profile.no_audio_playback:
         args.append("--no-audio-playback")

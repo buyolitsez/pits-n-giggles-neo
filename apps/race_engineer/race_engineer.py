@@ -56,6 +56,7 @@ from lib.race_engineer import (
     HttpConversationAgent,
     HttpConversationConfig,
     LocalBriefConversationAgent,
+    MemoryConversationAgent,
     MicrophoneCaptureConfig,
     NoOpAudioSink,
     NullVoiceEngine,
@@ -73,6 +74,7 @@ from lib.race_engineer import (
     VoiceResult,
     WindowsWaveAudioSink,
     WindowsWaveInMicrophoneCapture,
+    default_race_engineer_memory_path,
     diagnose_race_engineer_launch_profile,
     format_race_engineer_profile_diagnostics,
     load_race_engineer_launch_profile,
@@ -930,6 +932,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Optional JSON file with race engineer prompt overrides by category",
     )
     parser.add_argument(
+        "--memory-file",
+        type=str,
+        default=_env("PNG_RACE_ENGINEER_MEMORY_FILE", default_race_engineer_memory_path()),
+        help="Editable JSON file with driver calibration memory",
+    )
+    parser.add_argument(
         "--write-agent-prompts-template",
         type=str,
         default="",
@@ -1068,7 +1076,11 @@ def build_conversation_agent(
         agent_prompt_overrides: Dict[str, Dict[str, str]]) -> RaceEngineerConversationAgent:
     """Build the requested question-answer provider."""
 
-    local_agent = LocalBriefConversationAgent(agent_prompt_overrides=agent_prompt_overrides)
+    memory_file = str(getattr(args, "memory_file", "") or "").strip()
+    local_agent = LocalBriefConversationAgent(
+        agent_prompt_overrides=agent_prompt_overrides,
+        memory_file=memory_file,
+    )
     provider = _normalise_conversation_provider(
         getattr(args, "conversation_provider", _CONVERSATION_PROVIDER_LOCAL)
     )
@@ -1076,7 +1088,7 @@ def build_conversation_agent(
         command = str(getattr(args, "conversation_command", "") or "").strip()
         if not command:
             logger.warning("Codex CLI conversation provider requested but no command was configured; using local brief")
-            return local_agent
+            return _wrap_memory_agent(local_agent, memory_file)
         cli_agent = CodexCliConversationAgent(
             CodexCliConversationConfig(
                 command=command,
@@ -1084,16 +1096,17 @@ def build_conversation_agent(
                 provider_name="codex_cli",
             ),
             agent_prompt_overrides=agent_prompt_overrides,
+            memory_file=memory_file,
         )
-        return FallbackConversationAgent(cli_agent, local_agent)
+        return _wrap_memory_agent(FallbackConversationAgent(cli_agent, local_agent), memory_file)
 
     if provider != _CONVERSATION_PROVIDER_HTTP:
-        return local_agent
+        return _wrap_memory_agent(local_agent, memory_file)
 
     endpoint = str(getattr(args, "conversation_endpoint", "") or "").strip()
     if not endpoint:
         logger.warning("HTTP conversation provider requested but no endpoint was configured; using local brief")
-        return local_agent
+        return _wrap_memory_agent(local_agent, memory_file)
 
     http_agent = HttpConversationAgent(
         HttpConversationConfig(
@@ -1103,8 +1116,17 @@ def build_conversation_agent(
             provider_name="external_http",
         ),
         agent_prompt_overrides=agent_prompt_overrides,
+        memory_file=memory_file,
     )
-    return FallbackConversationAgent(http_agent, local_agent)
+    return _wrap_memory_agent(FallbackConversationAgent(http_agent, local_agent), memory_file)
+
+
+def _wrap_memory_agent(
+        agent: RaceEngineerConversationAgent,
+        memory_file: str) -> RaceEngineerConversationAgent:
+    if not memory_file:
+        return agent
+    return MemoryConversationAgent(agent, memory_file=memory_file)
 
 
 async def main(args: argparse.Namespace) -> None:
@@ -1337,7 +1359,11 @@ async def run_profile_preflight(
     question_errors = [
         item for item in diagnostics
         if item.severity == "error"
-        and (item.code.startswith("conversation-") or item.code.startswith("agent-prompts-file-"))
+        and (
+            item.code.startswith("conversation-")
+            or item.code.startswith("agent-prompts-file-")
+            or item.code.startswith("memory-file-")
+        )
     ]
 
     if voice_errors:

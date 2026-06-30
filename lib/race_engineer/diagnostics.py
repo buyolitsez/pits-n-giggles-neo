@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 from .agent_prompts import load_agent_prompt_overrides
 from .conversation import parse_conversation_command
 from .launch_profile import RaceEngineerLaunchProfile
+from .memory import load_race_engineer_memory
 
 # -------------------------------------- CLASSES -----------------------------------------------------------------------
 
@@ -74,6 +75,7 @@ def diagnose_race_engineer_launch_profile(
     _check_azure_stt(profile, env, platform, issues)
     _check_conversation(profile, issues, command_exists)
     _check_prompt_file(profile, issues, path_exists)
+    _check_memory_file(profile, issues, path_exists)
     _check_udp_actions(profile, issues)
 
     return issues
@@ -132,6 +134,8 @@ def race_engineer_profile_diagnostic_next_steps(
         steps.append("Create or choose an agent prompts JSON file, then rerun Check.")
     if "agent-prompts-file-invalid" in codes:
         steps.append("Fix the agent prompts JSON file or create a fresh template from the Prompts tab.")
+    if "memory-file-invalid" in codes:
+        steps.append("Fix the Race Engineer memory JSON file or create a fresh template from the Questions tab.")
     if "udp-action-conflict" in codes:
         steps.append("Use different UDP action codes for toggle and push-to-talk.")
     if "ptt-speech-recognition-disabled" in codes:
@@ -249,6 +253,25 @@ def _check_prompt_file(
             severity="error",
             code="agent-prompts-file-invalid",
             message=f"Agent prompts file {profile.agent_prompts_file!r} is not valid: {exc}",
+        ))
+
+
+def _check_memory_file(
+    profile: RaceEngineerLaunchProfile,
+    issues: list[RaceEngineerProfileDiagnostic],
+    path_exists,
+) -> None:
+    if not profile.memory_file:
+        return
+    if not path_exists(profile.memory_file):
+        return
+    try:
+        load_race_engineer_memory(profile.memory_file)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        issues.append(RaceEngineerProfileDiagnostic(
+            severity="error",
+            code="memory-file-invalid",
+            message=f"Race Engineer memory file {profile.memory_file!r} is not valid: {exc}",
         ))
 
 

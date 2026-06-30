@@ -102,8 +102,8 @@ while the process is running and shows a compact live badge such as `Online`,
 The settings dialog also has `Check`, `Voice Test`, `Question Test`,
 `Audio Q Test`, `Mic PTT Test`, and `Preflight` buttons. `Check` runs offline setup diagnostics for the profile: Azure
 endpoint/region, key environment variable presence, STT/PTT compatibility,
-Codex CLI command shape, prompt file path plus prompt JSON schema, and UDP
-action conflicts. It does not contact Azure, does not print secret values, and
+Codex CLI command shape, prompt file path plus prompt JSON schema, memory JSON
+validity, and UDP action conflicts. It does not contact Azure, does not print secret values, and
 shows the same setup next-steps used by `Preflight`. `Voice Test` runs a
 one-message profile voice smoke test from the current form values through a
 temporary profile, so the saved profile is not changed unless `Save` is
@@ -128,6 +128,13 @@ category and the current default prompt contract. Edit only the category fields
 you want to override, then keep that file selected in the profile.
 `Check` and `Preflight` validate that the selected JSON has known advisor
 categories and supported fields before it can affect runtime answers.
+
+The `Questions` tab also has a `Memory JSON` path. This is the driver's
+editable calibration memory. If the file does not exist, the assistant runs on
+defaults and creates it the first time you give calibration feedback such as
+`запомни, говори короче`, `не повторяй`, or `говори по-русски`. The `Create`
+button writes a blank template, and `Open` opens the JSON so you can inspect or
+edit remembered style rules by hand.
 
 The same check is available from the command line:
 
@@ -257,12 +264,12 @@ $env:PNG_RACE_ENGINEER_CONVERSATION_KEY_ENV_VAR = "PNG_CODEX_PROXY_KEY"
 ```
 
 The HTTP endpoint receives only a compact prompt package: the driver's question,
-advisor prompt specs, current facts, advice, review status, battle context, and
-a radio answer contract. It does not receive raw race-table rows or packet-level
-telemetry. The answer contract asks external providers to answer in the same
-language as the question, in at most two short race-radio sentences with no
-markdown or bullet list. If the endpoint fails, the race engineer falls back to
-the local brief answerer.
+advisor prompt specs, current facts, advice, review status, battle context,
+driver memory, and a radio answer contract. It does not receive raw race-table
+rows or packet-level telemetry. The answer contract asks external providers to
+answer in the configured memory language or the same language as the question,
+using the memory's length limits, with no markdown or bullet list. If the
+endpoint fails, the race engineer falls back to the local brief answerer.
 
 For a local Codex CLI flow, select `codex_cli` and configure a command. The app
 runs the command without a shell, sends the same compact prompt package as JSON
@@ -302,6 +309,12 @@ poetry run python -m apps.race_engineer --write-agent-prompts-template C:\path\t
 
 ```powershell
 $env:PNG_RACE_ENGINEER_AGENT_PROMPTS_FILE = "C:\path\to\race-engineer-prompts.json"
+```
+
+Driver calibration memory can also be selected without the launcher:
+
+```powershell
+$env:PNG_RACE_ENGINEER_MEMORY_FILE = "C:\path\to\race-engineer-memory.json"
 ```
 
 Azure keys should be passed through the environment, not stored in config or
