@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import json
 from dataclasses import replace
+from collections import deque
 import logging
 import os
 import sys
@@ -104,6 +105,29 @@ _CONVERSATION_PROVIDER_HTTP = "http"
 _CONVERSATION_PROVIDER_CODEX_CLI = "codex_cli"
 _DEFAULT_PROFILE_PREFLIGHT_QUESTION = "какие шины брать на пит?"
 
+_VOICE_BURST_WINDOW_SECONDS = 45.0
+_VOICE_BURST_STEP = 0.2
+_VOICE_BURST_MAX_MULTIPLIER = 2.5
+_VOICE_CHATTTER_FINISH_WINDOW_SECONDS = 120.0
+_VOICE_PRIORITY_ADAPTIVE_MULTIPLIERS = {
+    "warning": 1.05,
+    "advisory": 1.25,
+    "info": 1.0,
+}
+_VOICE_CATEGORY_ADAPTIVE_MULTIPLIERS = {
+    "driving_coach": 1.8,
+    "fuel": 1.25,
+    "tyres": 1.2,
+    "pit": 1.2,
+    "race_control": 1.15,
+    "system": 0.9,
+}
+_VOICE_SESSION_PHASE_MULTIPLIERS = {
+    "start": 0.9,
+    "mid": 1.0,
+    "end": 1.25,
+}
+
 # -------------------------------------- CLASSES -----------------------------------------------------------------------
 
 class RaceEngineerApp:
@@ -170,6 +194,7 @@ class RaceEngineerApp:
         self._last_question_result: Optional[Dict[str, Any]] = None
         self._last_speech_recognition_result: Optional[Dict[str, Any]] = None
         self._last_voice_queued_at: Optional[float] = None
+        self._noncritical_voice_queue_times: deque[float] = deque()
         self._session_uid: Optional[str] = None
         self._session_generation = 0
         self._init_routes()
@@ -573,6 +598,7 @@ class RaceEngineerApp:
             self._session_uid = session_uid
             self._session_generation += 1
             self._last_voice_queued_at = None
+            self._noncritical_voice_queue_times.clear()
             self._cancel_active_voice("session changed during playback")
             return
         if session_uid == self._session_uid:
@@ -587,6 +613,7 @@ class RaceEngineerApp:
         self._last_snapshot = None
         self._using_backend_trace = False
         self._last_voice_queued_at = None
+        self._noncritical_voice_queue_times.clear()
         self._cancel_active_voice("session changed during playback")
         self.announcer.clear()
         self.trace_recorder.clear()
@@ -605,7 +632,11 @@ class RaceEngineerApp:
         is_critical = priority_rank == _VOICE_PRIORITY_RANK["critical"]
         queued_at = self._monotonic_clock()
 
-        if not is_critical and not bypass_rate_limit and self._is_voice_rate_limited(queued_at):
+        if (
+            not is_critical
+            and not bypass_rate_limit
+            and self._is_voice_rate_limited(queued_at, announcement)
+        ):
             self._dropped_announcements_count += 1
             self._rate_limited_announcements_count += 1
             self.logger.debug("Dropped race engineer callout inside global voice interval")
@@ -629,18 +660,71 @@ class RaceEngineerApp:
             self.logger.warning("Race engineer voice queue is full; dropping callout")
             return
         self._last_voice_queued_at = queued_at
+        if not is_critical and not bypass_rate_limit:
+            self._track_voice_output_activity(queued_at)
 
     def _tag_announcement(self, announcement: Any) -> Any:
         if isinstance(announcement, RaceEngineerAnnouncement):
             return replace(announcement, session_generation=self._session_generation)
         return announcement
 
-    def _is_voice_rate_limited(self, now: float) -> bool:
+    def _is_voice_rate_limited(self, now: float, announcement: Any) -> bool:
         if self.min_voice_interval_seconds <= 0:
             return False
         if self._last_voice_queued_at is None:
             return False
-        return (now - self._last_voice_queued_at) < self.min_voice_interval_seconds
+        return (now - self._last_voice_queued_at) < self._effective_voice_interval(announcement, now)
+
+    def _effective_voice_interval(self, announcement: Any, now: float) -> float:
+        priority = str(getattr(announcement, "priority", "info")).strip().lower()
+        category = str(getattr(announcement, "category", "system")).strip().lower()
+        category_multiplier = _VOICE_CATEGORY_ADAPTIVE_MULTIPLIERS.get(category, 1.0)
+        priority_multiplier = _VOICE_PRIORITY_ADAPTIVE_MULTIPLIERS.get(priority, 1.0)
+        phase_multiplier = _VOICE_SESSION_PHASE_MULTIPLIERS[self._estimate_session_phase()]
+        burst_multiplier = self._voice_burst_factor(now)
+        return max(
+            0.0,
+            self.min_voice_interval_seconds
+            * category_multiplier
+            * priority_multiplier
+            * phase_multiplier
+            * burst_multiplier,
+        )
+
+    def _voice_burst_factor(self, now: float) -> float:
+        self._prune_noncritical_voice_times(now)
+        recent_count = len(self._noncritical_voice_queue_times)
+        if recent_count <= 1:
+            return 1.0
+        return min(
+            _VOICE_BURST_MAX_MULTIPLIER,
+            1.0 + ((recent_count - 1) * _VOICE_BURST_STEP),
+        )
+
+    def _prune_noncritical_voice_times(self, now: float) -> None:
+        while (
+            self._noncritical_voice_queue_times
+            and now - self._noncritical_voice_queue_times[0] > _VOICE_BURST_WINDOW_SECONDS
+        ):
+            self._noncritical_voice_queue_times.popleft()
+
+    def _estimate_session_phase(self) -> str:
+        if not isinstance(self._last_snapshot, dict):
+            return "mid"
+        current_lap = _int_or_default(self._last_snapshot.get("current-lap"), 0)
+        total_laps = _int_or_default(self._last_snapshot.get("total-laps"), 0)
+        session_time_left = _float_or_default(self._last_snapshot.get("session-time-left"), -1.0)
+        if total_laps and current_lap <= 2:
+            return "start"
+        if 0 <= session_time_left < _VOICE_CHATTTER_FINISH_WINDOW_SECONDS:
+            return "end"
+        if total_laps and current_lap >= max(1, total_laps - 1):
+            return "end"
+        return "mid"
+
+    def _track_voice_output_activity(self, now: float) -> None:
+        self._prune_noncritical_voice_times(now)
+        self._noncritical_voice_queue_times.append(now)
 
     def _is_obsolete_announcement(self, announcement: Any) -> bool:
         generation = getattr(announcement, "session_generation", self._session_generation)
@@ -2095,6 +2179,14 @@ def _bool_from_control_value(value: Any) -> Optional[bool]:
 def _int_or_default(value: Any, default: int) -> int:
     try:
         value = int(value)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _float_or_default(value: Any, default: float) -> float:
+    try:
+        value = float(value)
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default

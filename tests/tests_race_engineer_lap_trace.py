@@ -253,6 +253,22 @@ class TestRaceEngineerLapTrace(unittest.TestCase):
         self.assertIn("throttle pickup", advice[0]["message"])
         self.assertIn("Open the car earlier", advice[0]["voice_callout"])
 
+    def test_single_weak_throttle_sample_is_ignored(self):
+        recorder = DrivingTraceRecorder(bin_size_m=100, min_samples=4)
+        for sample in _lap_samples(lap=1, speed=220, throttle=0.8, brake=0.0):
+            recorder.update_from_stream_overlay(sample)
+        recorder.update_from_stream_overlay(_stream_sample(lap=2, distance=0, timestamp=20.0))
+
+        for sample in _lap_samples(lap=2, speed=219, throttle=0.75, brake=0.0, timestamp_offset=20.0):
+            if sample["hud"]["circuit-position"] == 300:
+                sample["hud"]["throttle"] = 0.4
+                sample["car-telemetry"]["throttle"] = 40
+                sample["hud"]["speed-kmph"] = 214
+            advice = recorder.update_from_stream_overlay(sample)
+        advice = recorder.update_from_stream_overlay(_stream_sample(lap=3, distance=0, timestamp=40.0))
+
+        self.assertEqual(len(advice), 0)
+
     def test_completed_lap_reports_pure_speed_loss_against_reference(self):
         recorder = DrivingTraceRecorder(bin_size_m=100, min_samples=4)
         for sample in _lap_samples(lap=1, speed=220, throttle=0.8, brake=0.0):

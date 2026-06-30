@@ -32,6 +32,13 @@ _MIN_TRACE_SAMPLES = 6
 _MIN_REFERENCE_COVERAGE_RATIO = 0.55
 _EARLY_BRAKE_DELTA_M = 35.0
 _BRAKE_THROTTLE_OVERLAP_PCT = 25.0
+_MIN_CONSECUTIVE_BIN_PAIRS = {
+    "brake_throttle_overlap": 2,
+    "early_brake": 2,
+    "long_coast": 2,
+    "weak_throttle": 2,
+    "speed_loss": 1,
+}
 _REFERENCE_OVERLAP_PCT = 5.0
 _OVERLAP_SPEED_FLOOR_KMPH = 80.0
 _OVERLAP_SPEED_LOSS_KMPH = 4.0
@@ -355,6 +362,23 @@ def _find_trace_issues(
         brake_throttle_overlap_candidates,
         min_consecutive_bins=_OVERLAP_MIN_CONSECUTIVE_BINS,
     )
+    early_brake = _consecutive_sample_pairs(
+        early_brake,
+        min_consecutive_bins=_MIN_CONSECUTIVE_BIN_PAIRS["early_brake"],
+    )
+    long_coast = _consecutive_sample_pairs(
+        long_coast,
+        min_consecutive_bins=_MIN_CONSECUTIVE_BIN_PAIRS["long_coast"],
+    )
+    weak_throttle = _consecutive_sample_pairs(
+        weak_throttle,
+        min_consecutive_bins=_MIN_CONSECUTIVE_BIN_PAIRS["weak_throttle"],
+    )
+    speed_loss = _consecutive_sample_pairs(
+        speed_loss,
+        min_consecutive_bins=_MIN_CONSECUTIVE_BIN_PAIRS["speed_loss"],
+    )
+
     if brake_throttle_overlap:
         issues.append(_summarise_issue("brake_throttle_overlap", brake_throttle_overlap, bin_size_m))
     if early_brake:

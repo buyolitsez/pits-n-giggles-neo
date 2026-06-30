@@ -1885,6 +1885,33 @@ class TestRaceEngineerAppRoutes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queued.advice_id, "urgent")
         self.assertEqual(queued.priority, "critical")
 
+    async def test_driving_coach_advisory_gets_adaptive_longer_interval(self):
+        clock = _FakeClock(100.0)
+        with _fake_ipc_module():
+            app = RaceEngineerApp(
+                logger=_SilentLogger(),
+                broker_xpub_port=4242,
+                voice_engine=NullVoiceEngine(),
+                min_priority="advisory",
+                cooldown_seconds=20,
+                max_items=5,
+                max_queue_size=3,
+                focus="all",
+                min_voice_interval_seconds=5.0,
+                monotonic_clock=clock.now,
+            )
+
+        app._queue_announcement(_announcement("first", "advisory", category="driving_coach"))
+        clock.value = 106.0
+        app._queue_announcement(_announcement("second", "advisory", category="driving_coach"))
+        clock.value = 118.0
+        app._queue_announcement(_announcement("third", "advisory", category="driving_coach"))
+
+        stats = app.get_stats()
+        self.assertEqual(stats["voice-queue-size"], 2)
+        self.assertEqual(stats["dropped-announcements-count"], 1)
+        self.assertEqual(stats["rate-limited-announcements-count"], 1)
+
     async def test_failed_voice_result_is_reported_in_stats(self):
         voice_engine = _RecordingVoiceEngine(
             VoiceResult(
@@ -2332,11 +2359,11 @@ def _stream_sample(*, lap, distance, timestamp, session_uid="abc", speed=210, th
     }
 
 
-def _announcement(advice_id, priority):
+def _announcement(advice_id, priority, category="test"):
     return RaceEngineerAnnouncement(
         text=f"{priority} callout",
         priority=priority,
-        category="test",
+        category=category,
         cooldown_key=f"test:{advice_id}",
         advice_id=advice_id,
         evidence=[],
