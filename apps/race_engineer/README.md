@@ -263,6 +263,8 @@ questions do not call Azure STT; the app speaks a short muted status instead.
 
 UDP action bindings saved in the launcher profile are read by the backend at
 startup. Restart the backend after changing the wheel-button bindings.
+In the launcher Controls tab, leave the UDP action fields empty for unbound, or
+type a number from `1` to `12` matching the UDP Action bound in the F1 game.
 If a push-to-talk UDP action is bound, `Check` and `Preflight` require speech
 recognition to be enabled so a wheel button cannot silently do nothing.
 

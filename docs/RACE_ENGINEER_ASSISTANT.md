@@ -441,6 +441,9 @@ Current implementation:
   one hold action code to push-to-talk. The backend reads these sidecar bindings
   at startup and ignores a profile binding if it conflicts with an existing HUD
   UDP action code.
+- In the launcher Controls tab, UDP action bindings are plain text fields:
+  empty means unbound, and `1` through `12` map to the F1 game's UDP Action
+  numbers.
 - Profile diagnostics report a blocking error when a push-to-talk UDP action is
   bound while speech recognition is disabled, so a wheel button cannot silently
   do nothing in the car.

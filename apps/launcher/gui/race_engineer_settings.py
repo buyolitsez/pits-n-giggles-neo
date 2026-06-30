@@ -27,7 +27,7 @@ from typing import Optional
 
 from PySide6.QtCore import QProcess, Qt, QUrl
 
-from PySide6.QtGui import QDesktopServices, QFont
+from PySide6.QtGui import QDesktopServices, QFont, QIntValidator
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -331,11 +331,13 @@ class RaceEngineerSettingsDialog(QDialog):
 
     def _build_controls_tab(self) -> QWidget:
         tab, form = self._tab_with_form()
-        self.race_engineer_toggle_udp_action_code = _udp_spin()
-        self.race_engineer_push_to_talk_udp_action_code = _udp_spin()
+        self.race_engineer_toggle_udp_action_code = _udp_action_line_edit()
+        self.race_engineer_push_to_talk_udp_action_code = _udp_action_line_edit()
         form.addRow("Toggle engineer UDP action", self.race_engineer_toggle_udp_action_code)
         form.addRow("Push-to-talk UDP action", self.race_engineer_push_to_talk_udp_action_code)
-        note = QLabel("UDP action bindings are read by the backend when it starts.")
+        note = QLabel(
+            "Leave empty for Not bound. Enter a UDP Action number from 1 to 12, then restart the backend."
+        )
         note.setWordWrap(True)
         note.setStyleSheet("color: #9cdcfe; background-color: transparent;")
         form.addRow("", note)
@@ -388,8 +390,11 @@ class RaceEngineerSettingsDialog(QDialog):
         self.memory_file.setText(profile.memory_file)
 
         self.agent_prompts_file.setText(profile.agent_prompts_file)
-        _set_udp_spin(self.race_engineer_toggle_udp_action_code, profile.race_engineer_toggle_udp_action_code)
-        _set_udp_spin(
+        _set_udp_action_line_edit(
+            self.race_engineer_toggle_udp_action_code,
+            profile.race_engineer_toggle_udp_action_code,
+        )
+        _set_udp_action_line_edit(
             self.race_engineer_push_to_talk_udp_action_code,
             profile.race_engineer_push_to_talk_udp_action_code,
         )
@@ -425,8 +430,9 @@ class RaceEngineerSettingsDialog(QDialog):
             conversation_timeout_seconds=self.conversation_timeout_seconds.value(),
             agent_prompts_file=self.agent_prompts_file.text().strip(),
             memory_file=self.memory_file.text().strip(),
-            race_engineer_toggle_udp_action_code=_udp_spin_value(self.race_engineer_toggle_udp_action_code),
-            race_engineer_push_to_talk_udp_action_code=_udp_spin_value(
+            race_engineer_toggle_udp_action_code=_udp_action_line_edit_value(
+                self.race_engineer_toggle_udp_action_code),
+            race_engineer_push_to_talk_udp_action_code=_udp_action_line_edit_value(
                 self.race_engineer_push_to_talk_udp_action_code),
         )
 
@@ -1049,20 +1055,27 @@ def _double_spin(minimum: float, maximum: float, decimals: int) -> QDoubleSpinBo
     return spin
 
 
-def _udp_spin() -> QSpinBox:
-    spin = QSpinBox()
-    spin.setRange(0, 12)
-    spin.setSpecialValueText("Not bound")
-    return spin
+def _udp_action_line_edit() -> QLineEdit:
+    line_edit = QLineEdit()
+    line_edit.setValidator(QIntValidator(1, 12, line_edit))
+    line_edit.setPlaceholderText("Not bound")
+    line_edit.setClearButtonEnabled(True)
+    return line_edit
 
 
-def _set_udp_spin(spin: QSpinBox, value: Optional[int]) -> None:
-    spin.setValue(value or 0)
+def _set_udp_action_line_edit(line_edit: QLineEdit, value: Optional[int]) -> None:
+    line_edit.setText(str(value) if value else "")
 
 
-def _udp_spin_value(spin: QSpinBox) -> Optional[int]:
-    value = spin.value()
-    return value if value > 0 else None
+def _udp_action_line_edit_value(line_edit: QLineEdit) -> Optional[int]:
+    text = line_edit.text().strip()
+    if not text:
+        return None
+    try:
+        value = int(text)
+    except ValueError:
+        return None
+    return value if 1 <= value <= 12 else None
 
 
 def _last_lines(text: str, *, max_chars: int = 1600) -> str:
