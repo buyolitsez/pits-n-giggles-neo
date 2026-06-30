@@ -480,6 +480,11 @@ def _format_azure_error(response: AzureSpeechResponse, *, attempt_count: int = 1
     detail = ""
     if response.error_text:
         detail = f": {response.error_text[:200]}"
+    elif response.status_code == 400:
+        detail = (
+            ": check Azure voice name, endpoint, and output format. "
+            "For Russian TTS try voice ru-RU-DmitryNeural or ru-RU-SvetlanaNeural."
+        )
     attempt_text = f" after {attempt_count} attempt(s)" if attempt_count > 1 else ""
     return f"Azure Speech request failed with HTTP {response.status_code}{attempt_text}{detail}"
 

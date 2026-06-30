@@ -176,6 +176,20 @@ class TestRaceEngineerAzureVoice(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(sink.calls, [])
 
+    async def test_http_400_without_body_reports_actionable_hint(self):
+        client = FakeAzureSpeechClient(AzureSpeechResponse(status_code=400))
+        sink = RecordingAudioSink()
+        config = AzureSpeechConfig(region="eastus", subscription_key="secret")
+        engine = AzureSpeechVoiceEngine(config, client=client, audio_sink=sink)
+
+        result = await engine.speak("Recharge on the straight.")
+
+        self.assertFalse(result.ok)
+        self.assertIn("HTTP 400", result.error)
+        self.assertIn("check Azure voice name", result.error)
+        self.assertIn("ru-RU-DmitryNeural", result.error)
+        self.assertEqual(sink.calls, [])
+
     async def test_retryable_http_error_is_retried_before_playback(self):
         client = FakeAzureSpeechClient(responses=[
             AzureSpeechResponse(status_code=429, audio=b"slow down", error_text="rate limit"),

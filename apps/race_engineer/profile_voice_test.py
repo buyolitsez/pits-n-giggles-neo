@@ -210,6 +210,17 @@ def format_profile_question_test_output(output: str) -> str:
     return _last_lines(output) or "Question test completed without an answer."
 
 
+def format_profile_voice_test_output(output: str) -> str:
+    """Format profile voice-test stdout for a launcher message box."""
+
+    text = str(output or "").strip()
+    for line in reversed(text.splitlines()):
+        clean = line.strip()
+        if clean.startswith("RuntimeError: "):
+            return clean.removeprefix("RuntimeError: ").strip()
+    return _last_lines(text) or "Voice test failed."
+
+
 def format_profile_audio_question_test_output(output: str) -> str:
     """Format profile audio question-test stdout for a launcher message box."""
 

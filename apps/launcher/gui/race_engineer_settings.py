@@ -59,6 +59,7 @@ from apps.race_engineer.profile_voice_test import (
     format_profile_mic_question_test_output,
     format_profile_preflight_output,
     format_profile_question_test_output,
+    format_profile_voice_test_output,
     write_temp_profile_for_smoke_test,
 )
 from lib.race_engineer import (
@@ -650,7 +651,7 @@ class RaceEngineerSettingsDialog(QDialog):
             return
         message = "Voice test failed."
         if output:
-            message = f"{message}\n\n{_last_lines(output)}"
+            message = f"{message}\n\n{format_profile_voice_test_output(output)}"
         QMessageBox.warning(self, "Race Engineer Voice Test", message)
 
     def _on_voice_test_error(self, _error) -> None:

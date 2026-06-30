@@ -38,6 +38,7 @@ from apps.race_engineer.profile_voice_test import (
     format_profile_preflight_output,
     cleanup_temp_profile_for_smoke_test,
     format_profile_question_test_output,
+    format_profile_voice_test_output,
     write_temp_profile_for_smoke_test,
 )
 from lib.race_engineer import RaceEngineerLaunchProfile, load_race_engineer_launch_profile
@@ -204,6 +205,18 @@ noise before
         output = '{"ok": false, "error": "provider timed out"}'
 
         self.assertEqual(format_profile_question_test_output(output), "provider timed out")
+
+    def test_format_profile_voice_test_output_extracts_runtime_error(self):
+        output = """
+Traceback (most recent call last):
+  File "race_engineer.py", line 1, in <module>
+RuntimeError: Azure Speech request failed with HTTP 400
+"""
+
+        self.assertEqual(
+            format_profile_voice_test_output(output),
+            "Azure Speech request failed with HTTP 400",
+        )
 
     def test_format_profile_audio_question_test_output_summarises_full_pipeline(self):
         output = json.dumps({
