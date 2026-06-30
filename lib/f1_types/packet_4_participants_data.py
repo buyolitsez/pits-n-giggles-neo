@@ -386,7 +386,9 @@ class ParticipantData(F1SubPacketBase):
     @property
     def name(self) -> str:
         """
-        Get the name of the participant. If showOnlineNames is disabled, return the team name and driver number
+        Get the privacy-safe display name of the participant.
+
+        If showOnlineNames is disabled, return the team name and driver number.
 
         Returns:
             str: The name of the participant.
@@ -397,6 +399,16 @@ class ParticipantData(F1SubPacketBase):
         if self.m_teamId in self.GENERIC_TEAMS:
             return f"Player #{self.m_raceNumber}"
         return f"{self.m_teamId} #{self.m_raceNumber}"
+
+    @property
+    def best_available_name(self) -> str:
+        """
+        Get the best available participant name for local UI display.
+
+        Returns the raw packet name when present, and falls back to the
+        privacy-safe display name otherwise.
+        """
+        return self.m_name if self.m_name else self.name
 
     def to_bytes(self) -> bytes:
         """

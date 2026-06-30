@@ -25,7 +25,7 @@ from typing import Optional
 
 from lib.f1_types import (F1PacketType, LiveryColour, Nationality, get_team_id_class,
                           PacketHeader, PacketParticipantsData,
-                          ParticipantData, Platform, TelemetrySetting)
+                          ParticipantData, Platform, TeamID24, TelemetrySetting)
 # F126-CAPTURE: PKT4
 
 from .tests_parser_base import F1TypesTest
@@ -173,6 +173,51 @@ class TestPacketParticipantsData(F1TypesTest):
         parsed_json = parsed_packet.toJSON()
         self.jsonComparisionUtil(expected_json, parsed_json)
         self.assertFalse(hasattr(parsed_packet, '__dict__'))
+
+    def test_best_available_name_prefers_raw_name_when_online_names_hidden(self):
+        """
+        Hidden online names should still expose the raw packet name when present.
+        """
+        participant = ParticipantData.from_values(
+            self.m_header_24,
+            ai_controlled=False,
+            driver_id=255,
+            network_id=7,
+            team_id=TeamID24.F1_GENERIC,
+            my_team=False,
+            race_number=2,
+            nationality=Nationality.Unspecified,
+            name="HiddenNick",
+            your_telemetry=TelemetrySetting.PUBLIC,
+            show_online_names=False,
+            platform=Platform.STEAM,
+            tech_level=0,
+        )
+
+        self.assertEqual(participant.name, "Player #2")
+        self.assertEqual(participant.best_available_name, "HiddenNick")
+
+    def test_best_available_name_falls_back_when_raw_name_missing(self):
+        """
+        If the packet does not contain a raw name, keep the existing masked fallback.
+        """
+        participant = ParticipantData.from_values(
+            self.m_header_24,
+            ai_controlled=False,
+            driver_id=255,
+            network_id=7,
+            team_id=TeamID24.F1_GENERIC,
+            my_team=False,
+            race_number=2,
+            nationality=Nationality.Unspecified,
+            name="",
+            your_telemetry=TelemetrySetting.PUBLIC,
+            show_online_names=False,
+            platform=Platform.STEAM,
+            tech_level=0,
+        )
+
+        self.assertEqual(participant.best_available_name, "Player #2")
 
     def _getRandomParticipantData(self, header: PacketHeader, max_length: Optional[int] = 31) -> ParticipantData:
         """

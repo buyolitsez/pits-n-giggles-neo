@@ -632,12 +632,13 @@ class SessionState:
         self.m_player_index = packet.m_header.m_playerCarIndex if packet.m_header.m_playerCarIndex != 255 else None
         for index, participant in enumerate(packet.m_participants):
             obj_to_be_updated = self._getObjectByIndex(index, reason='Participants update')
-            obj_to_be_updated.m_driver_info.name = participant.name
+            resolved_name = participant.best_available_name
+            obj_to_be_updated.m_driver_info.name = resolved_name
             obj_to_be_updated.m_driver_info.team = str(participant.m_teamId)
             obj_to_be_updated.m_driver_info.driver_number = participant.m_raceNumber
             obj_to_be_updated.m_driver_info.is_player = (index == packet.m_header.m_playerCarIndex)
             obj_to_be_updated.m_driver_info.telemetry_setting = participant.m_yourTelemetry
-            obj_to_be_updated.m_tyre_info.m_tyre_wear_extrapolator.name = participant.name
+            obj_to_be_updated.m_tyre_info.m_tyre_wear_extrapolator.name = resolved_name
 
             if obj_to_be_updated.m_packet_copies.m_packet_particpant_data:
                 # Capture all AI state transitions
