@@ -124,6 +124,12 @@ from .launch_profile import (
     race_engineer_profile_udp_action_codes,
     save_race_engineer_launch_profile,
 )
+from .local_secrets import (
+    LocalSecretResult,
+    clear_local_env_secret,
+    local_env_secret_is_set,
+    save_local_env_secret,
+)
 from .memory import (
     DEFAULT_RACE_ENGINEER_MEMORY_FILE,
     RACE_ENGINEER_MEMORY_SCHEMA,
@@ -221,6 +227,7 @@ __all__ = [
     "RACE_ENGINEER_FAST_LIVE_COMMAND_TIMEOUT_MS",
     "RACE_ENGINEER_QUESTION_TIMEOUT_GRACE_SECONDS",
     "RaceEngineerLaunchProfile",
+    "LocalSecretResult",
     "DEFAULT_RACE_ENGINEER_MEMORY_FILE",
     "RACE_ENGINEER_MEMORY_SCHEMA",
     "RaceEngineerMemory",
@@ -288,9 +295,11 @@ __all__ = [
     "load_agent_prompt_overrides_from_env",
     "load_race_engineer_launch_profile",
     "load_race_engineer_memory",
+    "local_env_secret_is_set",
     "normalise_agent_prompt_overrides",
     "normalise_radio_timing_config",
     "save_agent_prompt_override_template",
+    "clear_local_env_secret",
     "race_engineer_launch_profile_from_dict",
     "race_engineer_launch_profile_to_cli_args",
     "race_engineer_live_question_timeout_ms",
@@ -310,6 +319,7 @@ __all__ = [
     "sample_from_stream_overlay",
     "sample_from_trace_update",
     "save_race_engineer_memory",
+    "save_local_env_secret",
     "save_race_engineer_memory_template",
     "save_race_engineer_launch_profile",
 ]

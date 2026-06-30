@@ -186,6 +186,10 @@ Current implementation:
 - The same settings dialog includes a `Voice Test` action that runs
   `--profile-voice-test` from the current form values through a temporary
   profile, so Azure TTS can be verified before saving or starting telemetry.
+- The `Voice` settings tab can save the Azure Speech key into the configured
+  local User environment variable, usually `PNG_AZURE_SPEECH_KEY`, without
+  storing it in the launch profile or repository. The current launcher process
+  also receives the key so immediate smoke tests and child processes inherit it.
 - It also includes a `Question Test` action that runs `--profile-question-test`
   from the current form values, verifying the selected local, HTTP, or
   `codex_cli` answer provider plus category prompt file before the game starts.

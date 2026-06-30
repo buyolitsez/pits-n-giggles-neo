@@ -123,6 +123,13 @@ the User environment scope so the launcher can read the key after restart. It
 does not record the microphone by surprise; for that live recording check use
 `Mic PTT Test`.
 
+The `Voice` tab has an `Azure key` password field. Paste the key and press
+`Save Key` or any test/save action; the value is written to the configured User
+environment variable, normally `PNG_AZURE_SPEECH_KEY`. It is not stored in
+`race_engineer_profile.json`, not printed, and not committed to git. The
+launcher process also receives the value immediately, so profile smoke tests
+and newly started child processes can use it without a launcher restart.
+
 The `Prompts` tab can create an editable JSON template with every advisor
 category and the current default prompt contract. Edit only the category fields
 you want to override, then keep that file selected in the profile.
@@ -337,6 +344,9 @@ command history:
 $env:PNG_AZURE_SPEECH_KEY = "<your Azure Speech key>"
 poetry run python -m apps.race_engineer --voice-provider azure --azure-speech-endpoint https://francecentral.api.cognitive.microsoft.com/ --voice-test
 ```
+
+From the launcher, paste the same key into `Race Engineer Settings -> Voice ->
+Azure key` and press `Save Key` instead of running the PowerShell command.
 
 If the same Azure values are already saved in the launcher profile, prefer:
 

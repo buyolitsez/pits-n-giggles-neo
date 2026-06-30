@@ -63,12 +63,15 @@ from apps.race_engineer.profile_voice_test import (
 )
 from lib.race_engineer import (
     RaceEngineerLaunchProfile,
+    clear_local_env_secret,
     default_race_engineer_memory_path,
     diagnose_race_engineer_launch_profile,
     format_race_engineer_profile_diagnostics,
+    local_env_secret_is_set,
     race_engineer_profile_diagnostic_next_steps,
     race_engineer_profile_has_errors,
     save_agent_prompt_override_template,
+    save_local_env_secret,
     save_race_engineer_memory_template,
     save_race_engineer_launch_profile,
 )
@@ -233,6 +236,9 @@ class RaceEngineerSettingsDialog(QDialog):
         self.azure_speech_endpoint = QLineEdit()
         self.azure_voice = QLineEdit()
         self.azure_key_env_var = QLineEdit()
+        self.azure_subscription_key = QLineEdit()
+        self.azure_subscription_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.azure_subscription_key.setPlaceholderText("Paste key to save locally")
         self.azure_output_format = QLineEdit()
         self.no_audio_playback = QCheckBox()
         self.speech_recognition_provider = _combo(["disabled", "azure"])
@@ -240,12 +246,29 @@ class RaceEngineerSettingsDialog(QDialog):
         self.azure_stt_format = QLineEdit()
         self.azure_stt_content_type = QLineEdit()
         self.push_to_talk_audio_source = _combo(["external", "windows_microphone"])
+        self.azure_key_status = QLabel()
+        self.azure_key_status.setStyleSheet("color: #9cdcfe; background-color: transparent;")
+        save_key = QPushButton("Save Key")
+        save_key.clicked.connect(self._save_azure_key_clicked)
+        clear_key = QPushButton("Clear Key")
+        clear_key.clicked.connect(self._clear_azure_key_clicked)
+        self.azure_key_env_var.textChanged.connect(lambda _text: self._update_azure_key_status())
+        key_row = QWidget()
+        key_layout = QHBoxLayout()
+        key_layout.setContentsMargins(0, 0, 0, 0)
+        key_layout.setSpacing(6)
+        key_layout.addWidget(self.azure_subscription_key, stretch=1)
+        key_layout.addWidget(save_key)
+        key_layout.addWidget(clear_key)
+        key_row.setLayout(key_layout)
 
         form.addRow("Voice provider", self.voice_provider)
         form.addRow("Azure region", self.azure_region)
         form.addRow("Azure endpoint", self.azure_speech_endpoint)
         form.addRow("Azure voice", self.azure_voice)
         form.addRow("Azure key env var", self.azure_key_env_var)
+        form.addRow("Azure key", key_row)
+        form.addRow("Key status", self.azure_key_status)
         form.addRow("Azure output format", self.azure_output_format)
         form.addRow("Discard playback audio", self.no_audio_playback)
         form.addRow("Speech recognition", self.speech_recognition_provider)
@@ -347,6 +370,7 @@ class RaceEngineerSettingsDialog(QDialog):
         self.azure_speech_endpoint.setText(profile.azure_speech_endpoint)
         self.azure_voice.setText(profile.azure_voice)
         self.azure_key_env_var.setText(profile.azure_key_env_var)
+        self.azure_subscription_key.clear()
         self.azure_output_format.setText(profile.azure_output_format)
         self.no_audio_playback.setChecked(profile.no_audio_playback)
         _set_combo(self.speech_recognition_provider, profile.speech_recognition_provider)
@@ -368,6 +392,7 @@ class RaceEngineerSettingsDialog(QDialog):
             self.race_engineer_push_to_talk_udp_action_code,
             profile.race_engineer_push_to_talk_udp_action_code,
         )
+        self._update_azure_key_status()
 
     def _profile_from_widgets(self) -> RaceEngineerLaunchProfile:
         return RaceEngineerLaunchProfile(
@@ -489,7 +514,62 @@ class RaceEngineerSettingsDialog(QDialog):
             "Agent prompts template created. Edit the JSON fields you want to override.",
         )
 
+    def _save_azure_key_clicked(self) -> None:
+        self._save_entered_azure_key(show_message=True)
+
+    def _clear_azure_key_clicked(self) -> None:
+        name = self._azure_key_env_var_name()
+        result = clear_local_env_secret(name)
+        self.azure_subscription_key.clear()
+        self._update_azure_key_status()
+        if result.ok:
+            QMessageBox.information(
+                self,
+                "Azure Key",
+                f"Cleared {result.env_var_name} from the local User environment.",
+            )
+            return
+        QMessageBox.warning(
+            self,
+            "Azure Key",
+            f"Could not clear Azure key:\n{result.error}",
+        )
+
+    def _save_entered_azure_key(self, *, show_message: bool = False) -> bool:
+        key = self.azure_subscription_key.text().strip()
+        if not key:
+            return True
+        result = save_local_env_secret(self._azure_key_env_var_name(), key)
+        self._update_azure_key_status()
+        if result.ok:
+            self.azure_subscription_key.clear()
+            if show_message:
+                QMessageBox.information(
+                    self,
+                    "Azure Key",
+                    f"Saved {result.env_var_name} locally as a User environment variable.",
+                )
+            return True
+        QMessageBox.warning(
+            self,
+            "Azure Key",
+            f"Could not save Azure key locally:\n{result.error}",
+        )
+        return False
+
+    def _azure_key_env_var_name(self) -> str:
+        return self.azure_key_env_var.text().strip() or RaceEngineerLaunchProfile().azure_key_env_var
+
+    def _update_azure_key_status(self) -> None:
+        name = self._azure_key_env_var_name()
+        if local_env_secret_is_set(name):
+            self.azure_key_status.setText(f"{name}: stored locally")
+        else:
+            self.azure_key_status.setText(f"{name}: not stored")
+
     def _on_save(self) -> None:
+        if not self._save_entered_azure_key():
+            return
         profile = self._profile_from_widgets()
         if (
                 profile.race_engineer_toggle_udp_action_code is not None
@@ -507,6 +587,8 @@ class RaceEngineerSettingsDialog(QDialog):
         self.accept()
 
     def _on_check(self) -> None:
+        if not self._save_entered_azure_key():
+            return
         profile = self._profile_from_widgets()
         diagnostics = diagnose_race_engineer_launch_profile(profile)
         message = format_race_engineer_profile_diagnostics(
@@ -520,6 +602,8 @@ class RaceEngineerSettingsDialog(QDialog):
 
     def _on_voice_test(self) -> None:
         if self._voice_test_process is not None:
+            return
+        if not self._save_entered_azure_key():
             return
 
         profile = self._profile_from_widgets()
@@ -590,6 +674,8 @@ class RaceEngineerSettingsDialog(QDialog):
 
     def _on_question_test(self) -> None:
         if self._question_test_process is not None:
+            return
+        if not self._save_entered_azure_key():
             return
 
         question, ok = QInputDialog.getText(
@@ -678,6 +764,8 @@ class RaceEngineerSettingsDialog(QDialog):
 
     def _on_audio_question_test(self) -> None:
         if self._audio_question_test_process is not None:
+            return
+        if not self._save_entered_azure_key():
             return
 
         audio_path, _ = QFileDialog.getOpenFileName(
@@ -771,6 +859,8 @@ class RaceEngineerSettingsDialog(QDialog):
 
     def _on_mic_question_test(self) -> None:
         if self._mic_question_test_process is not None:
+            return
+        if not self._save_entered_azure_key():
             return
 
         seconds, ok = QInputDialog.getDouble(
@@ -875,6 +965,8 @@ class RaceEngineerSettingsDialog(QDialog):
 
     def _on_preflight(self) -> None:
         if self._preflight_process is not None:
+            return
+        if not self._save_entered_azure_key():
             return
 
         try:
