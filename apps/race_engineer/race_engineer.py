@@ -372,6 +372,12 @@ class RaceEngineerApp:
             self.logger.warning("Ignored unknown race engineer control command: %r", msg)
             return False
 
+        self.logger.info(
+            "Race engineer control command from %s: %s -> enabled=%s",
+            msg.get("source", "control"),
+            command or msg.get("enabled"),
+            next_enabled,
+        )
         changed = self.set_enabled(
             next_enabled,
             announce=bool(msg.get("announce", True)),
@@ -416,9 +422,20 @@ class RaceEngineerApp:
         result = await self.speech_recognizer.transcribe(audio, content_type=content_type)
         self._record_speech_recognition_result(result)
         if not result.ok:
+            self.logger.info(
+                "Speech recognition failed: provider=%s status=%s error=%s",
+                result.provider,
+                result.status,
+                result.error,
+            )
             self._queue_system_announcement("I did not catch that.", "race-engineer-speech-not-recognized")
             return False
 
+        self.logger.info(
+            "Speech recognition succeeded: provider=%s text=%r",
+            result.provider,
+            result.text,
+        )
         answer = await self.ask_text_question(result.text, source="speech")
         return answer.ok
 
@@ -433,6 +450,11 @@ class RaceEngineerApp:
             if not self.enabled:
                 await self.ask_text_question("", source="push-to-talk")
                 return False
+            self.logger.info(
+                "Push-to-talk start received: speech=%s microphone=%s",
+                bool(self.speech_recognizer),
+                self.microphone_capture.provider if self.microphone_capture else "external",
+            )
             sample_rate_hz = _int_or_default(msg.get("sample_rate_hz") or msg.get("sample-rate-hz"), 16000)
             channels = _int_or_default(msg.get("channels"), 1)
             sample_width_bytes = _int_or_default(
@@ -468,6 +490,10 @@ class RaceEngineerApp:
             self._push_to_talk_sessions_count += 1
             return True
         if command in {"stop", "end", "release"}:
+            self.logger.info(
+                "Push-to-talk stop received with %d buffered raw audio bytes",
+                self.push_to_talk_buffer.raw_audio_bytes,
+            )
             return await self.finish_push_to_talk()
         if command == "cancel":
             self._cancel_push_to_talk_recording()
@@ -497,8 +523,14 @@ class RaceEngineerApp:
         clip = self.push_to_talk_buffer.stop()
         if clip is None:
             self._push_to_talk_failures_count += 1
+            self.logger.info("Push-to-talk finished without audio")
             self._queue_system_announcement("I did not hear anything.", "race-engineer-ptt-empty")
             return False
+        self.logger.info(
+            "Push-to-talk finished with %d raw bytes in %d chunk(s)",
+            clip.raw_audio_bytes,
+            clip.chunk_count,
+        )
         return await self.handle_audio_question(clip.audio, content_type=clip.content_type)
 
     async def ask_text_question(self, question: str, *, source: str = "question") -> RaceEngineerAnswer:
@@ -543,8 +575,9 @@ class RaceEngineerApp:
 
         if enabled:
             self.logger.info("Race engineer enabled by %s", source)
+            self._cancel_active_voice("race engineer enabled during playback")
             if announce:
-                self._queue_system_announcement("Race engineer online.", "race-engineer-online")
+                self._queue_system_announcement("Race engineer enabled.", "race-engineer-online")
         else:
             self.logger.info("Race engineer muted by %s", source)
             self._cancel_active_voice("race engineer muted during playback")

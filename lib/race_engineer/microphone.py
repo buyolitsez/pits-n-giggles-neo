@@ -214,6 +214,7 @@ class WindowsWaveInMicrophoneCapture:
             winmm.waveInReset(handle)
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
+        self._drain_ready_buffers(requeue=False)
 
         if winmm:
             for header in self._headers:
@@ -229,24 +230,27 @@ class WindowsWaveInMicrophoneCapture:
 
     def _poll_loop(self) -> None:
         while not self._stop_event.is_set():
-            for header in self._headers:
-                if not (header.dwFlags & _WHDR_DONE):
-                    continue
-                if header.dwBytesRecorded:
-                    audio = ctypes.string_at(header.lpData, header.dwBytesRecorded)
-                    try:
-                        if self._on_audio:
-                            self._on_audio(audio)
-                    except Exception as exc:  # pylint: disable=broad-exception-caught
-                        self.logger.warning("Microphone audio chunk was ignored: %s", exc)
-                header.dwBytesRecorded = 0
-                if self._handle and self._winmm:
-                    self._winmm.waveInAddBuffer(
-                        self._handle,
-                        ctypes.byref(header),
-                        ctypes.sizeof(header),
-                    )
+            self._drain_ready_buffers(requeue=True)
             time.sleep(self.poll_interval_seconds)
+
+    def _drain_ready_buffers(self, *, requeue: bool) -> None:
+        for header in self._headers:
+            if not (header.dwFlags & _WHDR_DONE):
+                continue
+            if header.dwBytesRecorded:
+                audio = ctypes.string_at(header.lpData, header.dwBytesRecorded)
+                try:
+                    if self._on_audio:
+                        self._on_audio(audio)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    self.logger.warning("Microphone audio chunk was ignored: %s", exc)
+            header.dwBytesRecorded = 0
+            if requeue and self._handle and self._winmm:
+                self._winmm.waveInAddBuffer(
+                    self._handle,
+                    ctypes.byref(header),
+                    ctypes.sizeof(header),
+                )
 
 
 class _WaveFormatEx(ctypes.Structure):

@@ -1202,13 +1202,40 @@ class TestRaceEngineerAppRoutes(unittest.IsolatedAsyncioTestCase):
         online = await app.voice_queue.get()
         app.voice_queue.task_done()
         self.assertEqual(online.advice_id, "race-engineer-online")
-        self.assertEqual(online.text, "Race engineer online.")
+        self.assertEqual(online.text, "Race engineer enabled.")
 
         snapshot = _snapshot()
         snapshot["table-entries"][1]["fuel-info"]["surplus-laps-png"] = -0.65
         await app.subscriber.routes["race-table-update"](snapshot)
 
         self.assertEqual(app.get_stats()["voice-queue-size"], 1)
+
+    async def test_control_route_enable_interrupts_muted_status_callout(self):
+        voice_engine = _BlockingVoiceEngine()
+        with _fake_ipc_module():
+            app = RaceEngineerApp(
+                logger=_SilentLogger(),
+                broker_xpub_port=4242,
+                voice_engine=voice_engine,
+                min_priority="warning",
+                cooldown_seconds=20,
+                max_items=5,
+                max_queue_size=3,
+                focus="all",
+            )
+        app._voice_task = asyncio.create_task(app._voice_worker())
+
+        await app.subscriber.routes["race-engineer-control"]({"command": "disable", "source": "udp-action"})
+        await voice_engine.started.wait()
+        self.assertEqual(voice_engine.calls[0]["text"], "Race engineer muted.")
+
+        await app.subscriber.routes["race-engineer-control"]({"command": "toggle", "source": "udp-action"})
+        await voice_engine.cancelled.wait()
+        await _wait_until(lambda: len(voice_engine.calls) == 2)
+
+        self.assertTrue(app.enabled)
+        self.assertEqual(voice_engine.calls[1]["text"], "Race engineer enabled.")
+        await app._stop_voice_worker()
 
     async def test_question_route_answers_from_latest_snapshot_and_queues_voice(self):
         conversation_agent = _FakeConversationAgent(
