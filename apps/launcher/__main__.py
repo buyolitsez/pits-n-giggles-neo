@@ -50,6 +50,7 @@ def _dispatch_frozen_submodule():
         "apps.hud",
         "apps.broker",
         "apps.mcp_server",
+        "apps.race_engineer",
     }
 
     # Locate the module name and its args

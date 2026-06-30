@@ -99,8 +99,10 @@ class SubsystemCard(QFrame):
             button.setFixedSize(32, 32)
             buttons_layout.addWidget(button)
 
-            # Disable buttons at start. post_start should enable them
-            self.manager.set_button_state(button, False)
+            enabled_when_stopped = button.property("_png_enabled_when_stopped")
+            if enabled_when_stopped is None:
+                enabled_when_stopped = True
+            self.manager.set_button_state(button, self.manager.status == "Stopped" and bool(enabled_when_stopped))
 
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
@@ -121,6 +123,42 @@ class SubsystemCard(QFrame):
             'Running': {
                 'bg': '#1e3a32',
                 'color': '#4ec9b0'
+            },
+            'Online': {
+                'bg': '#1e3a32',
+                'color': '#4ec9b0'
+            },
+            'No Telemetry': {
+                'bg': '#3d3d2a',
+                'color': '#d7ba7d'
+            },
+            'Listening': {
+                'bg': '#243a4d',
+                'color': '#9cdcfe'
+            },
+            'Speaking': {
+                'bg': '#1e3a32',
+                'color': '#4ec9b0'
+            },
+            'Queued': {
+                'bg': '#3d3d2a',
+                'color': '#d7ba7d'
+            },
+            'Muted': {
+                'bg': '#3e3e3e',
+                'color': '#b0b0b0'
+            },
+            'Voice Error': {
+                'bg': '#3d2a2a',
+                'color': '#f48771'
+            },
+            'Speech Error': {
+                'bg': '#3d2a2a',
+                'color': '#f48771'
+            },
+            'Question Error': {
+                'bg': '#3d2a2a',
+                'color': '#f48771'
             },
             'Stopping': {
                 'bg': '#3d3d2a',
