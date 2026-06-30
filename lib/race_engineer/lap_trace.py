@@ -326,10 +326,10 @@ def _find_trace_issues(
 ) -> List[Dict[str, Any]]:
     common_bins = sorted(set(lap.samples_by_bin).intersection(reference.samples_by_bin))
     brake_throttle_overlap_candidates: List[Tuple[int, DrivingTraceSample, DrivingTraceSample]] = []
-    early_brake: List[Tuple[DrivingTraceSample, DrivingTraceSample]] = []
-    long_coast: List[Tuple[DrivingTraceSample, DrivingTraceSample]] = []
-    weak_throttle: List[Tuple[DrivingTraceSample, DrivingTraceSample]] = []
-    speed_loss: List[Tuple[DrivingTraceSample, DrivingTraceSample]] = []
+    early_brake: List[Tuple[int, DrivingTraceSample, DrivingTraceSample]] = []
+    long_coast: List[Tuple[int, DrivingTraceSample, DrivingTraceSample]] = []
+    weak_throttle: List[Tuple[int, DrivingTraceSample, DrivingTraceSample]] = []
+    speed_loss: List[Tuple[int, DrivingTraceSample, DrivingTraceSample]] = []
 
     for bin_index in common_bins:
         current = lap.samples_by_bin[bin_index]
@@ -344,18 +344,18 @@ def _find_trace_issues(
         ):
             brake_throttle_overlap_candidates.append((bin_index, current, ref))
         if current.brake_pct >= 35 and ref.brake_pct <= 5 and current.speed_kmph <= ref.speed_kmph - 5:
-            early_brake.append((current, ref))
+            early_brake.append((bin_index, current, ref))
         if (
             current.throttle_pct <= _COASTING_THROTTLE_PCT
             and current.brake_pct <= _COASTING_BRAKE_PCT
             and (ref.throttle_pct >= 35 or ref.brake_pct >= 25)
             and current.speed_kmph <= ref.speed_kmph - _COASTING_SPEED_LOSS_KMPH
         ):
-            long_coast.append((current, ref))
+            long_coast.append((bin_index, current, ref))
         if ref.throttle_pct - current.throttle_pct >= _THROTTLE_DELTA_PCT and current.speed_kmph <= ref.speed_kmph - 4:
-            weak_throttle.append((current, ref))
+            weak_throttle.append((bin_index, current, ref))
         if ref.speed_kmph - current.speed_kmph >= _SPEED_LOSS_KMPH:
-            speed_loss.append((current, ref))
+            speed_loss.append((bin_index, current, ref))
 
     issues = []
     brake_throttle_overlap = _consecutive_sample_pairs(
