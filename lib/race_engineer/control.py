@@ -103,5 +103,6 @@ async def forward_race_engineer_control_messages(
 
     communicator = communicator or AsyncInterTaskCommunicator()
     while not shutdown_event.is_set():
-        if message := await communicator.receive(topic):
+        message = await communicator.receive(topic, timeout=0.1)
+        if message is not None:
             await publisher.publish(topic, message)

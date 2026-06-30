@@ -25,7 +25,6 @@
 import asyncio
 import unittest
 
-from lib.inter_task_communicator import AsyncInterTaskCommunicator
 from lib.race_engineer import (
     RACE_ENGINEER_CONTROL_TOPIC,
     RACE_ENGINEER_PTT_CONTROL_TOPIC,
@@ -39,10 +38,6 @@ from lib.race_engineer import (
 
 
 class TestRaceEngineerUdpActionBridge(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        await _drain_queue(RACE_ENGINEER_CONTROL_TOPIC)
-        await _drain_queue(RACE_ENGINEER_PTT_CONTROL_TOPIC)
-
     def test_udp_action_contract_names_are_stable(self):
         self.assertEqual(RACE_ENGINEER_TOGGLE_ACTION_FIELD, "race_engineer_toggle_udp_action_code")
         self.assertEqual(RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD, "race_engineer_push_to_talk_udp_action_code")
@@ -73,6 +68,7 @@ class TestRaceEngineerUdpActionBridge(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(tracker.update("ptt", False))
 
     async def test_control_bridge_publishes_internal_messages_to_broker_topic(self):
+        communicator = _FakeCommunicator()
         publisher = _FakePublisher()
         shutdown_event = asyncio.Event()
         task = asyncio.create_task(
@@ -80,10 +76,11 @@ class TestRaceEngineerUdpActionBridge(unittest.IsolatedAsyncioTestCase):
                 publisher,
                 shutdown_event,
                 RACE_ENGINEER_CONTROL_TOPIC,
+                communicator=communicator,
             )
         )
 
-        await AsyncInterTaskCommunicator().send(
+        await communicator.send(
             RACE_ENGINEER_CONTROL_TOPIC,
             {"command": "toggle", "source": "test"},
         )
@@ -99,11 +96,63 @@ class TestRaceEngineerUdpActionBridge(unittest.IsolatedAsyncioTestCase):
             (RACE_ENGINEER_CONTROL_TOPIC, {"command": "toggle", "source": "test"}),
         ])
 
+    async def test_control_bridge_publishes_every_queued_message(self):
+        communicator = _FakeCommunicator()
+        publisher = _FakePublisher()
+        shutdown_event = asyncio.Event()
+        task = asyncio.create_task(
+            forward_race_engineer_control_messages(
+                publisher,
+                shutdown_event,
+                RACE_ENGINEER_CONTROL_TOPIC,
+                communicator=communicator,
+            )
+        )
 
-async def _drain_queue(name: str) -> None:
-    communicator = AsyncInterTaskCommunicator()
-    while await communicator.receive(name, timeout=0):
-        pass
+        messages = [
+            {"command": "toggle", "source": "test", "seq": 1},
+            {"command": "toggle", "source": "test", "seq": 2},
+            {"command": "toggle", "source": "test", "seq": 3},
+        ]
+        for message in messages:
+            await communicator.send(RACE_ENGINEER_CONTROL_TOPIC, message)
+
+        await _wait_for(lambda: len(publisher.published) == len(messages))
+        shutdown_event.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        self.assertEqual(
+            publisher.published,
+            [(RACE_ENGINEER_CONTROL_TOPIC, message) for message in messages],
+        )
+
+    async def test_control_bridge_does_not_drop_empty_payloads(self):
+        communicator = _FakeCommunicator()
+        publisher = _FakePublisher()
+        shutdown_event = asyncio.Event()
+        task = asyncio.create_task(
+            forward_race_engineer_control_messages(
+                publisher,
+                shutdown_event,
+                RACE_ENGINEER_CONTROL_TOPIC,
+                communicator=communicator,
+            )
+        )
+
+        await communicator.send(RACE_ENGINEER_CONTROL_TOPIC, {})
+        await _wait_for(lambda: bool(publisher.published))
+        shutdown_event.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        self.assertEqual(publisher.published, [(RACE_ENGINEER_CONTROL_TOPIC, {})])
 
 
 async def _wait_for(predicate, *, timeout: float = 0.5) -> None:
@@ -120,6 +169,22 @@ class _FakePublisher:
 
     async def publish(self, topic, data):
         self.published.append((topic, data))
+
+
+class _FakeCommunicator:
+    def __init__(self):
+        self._queue = asyncio.Queue()
+
+    async def send(self, _queue_name, message):
+        await self._queue.put(message)
+
+    async def receive(self, _queue_name, timeout=None):
+        try:
+            if timeout is None:
+                return await self._queue.get()
+            return await asyncio.wait_for(self._queue.get(), timeout)
+        except asyncio.TimeoutError:
+            return None
 
 
 if __name__ == "__main__":

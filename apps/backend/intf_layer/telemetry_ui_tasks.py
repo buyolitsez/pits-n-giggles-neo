@@ -46,6 +46,10 @@ from .ipc import registerIpcTask
 from .request_handlers import handleDriverInfoRequest
 from .telemetry_web_server import TelemetryWebServer
 
+# -------------------------------------- CONSTANTS ---------------------------------------------------------------------
+
+RACE_ENGINEER_CONTROL_PUBLISHER_HWM = 1000
+
 # -------------------------------------- FUNCTIONS ---------------------------------------------------------------------
 
 def _initDealer(
@@ -107,6 +111,12 @@ def initUiIntfLayer(
     )
     ipc_pub = IpcPublisherAsync(logger=logger, port=settings.Network.broker_xsub_port)
     tasks.append(ipc_pub.get_task())
+    race_engineer_control_pub = IpcPublisherAsync(
+        logger=logger,
+        port=settings.Network.broker_xsub_port,
+        sndhwm=RACE_ENGINEER_CONTROL_PUBLISHER_HWM,
+    )
+    tasks.append(race_engineer_control_pub.get_task())
     tasks.append(asyncio.create_task(web_server.run(), name="Web Server Task"))
 
     dealer = _initDealer(settings, logger, session_state)
@@ -146,10 +156,16 @@ def initUiIntfLayer(
     tasks.append(asyncio.create_task(hudInteractionTask(dealer, shutdown_event),
                                      name="HUD Interaction Task"))
     tasks.append(asyncio.create_task(
-        raceEngineerControlTask(ipc_pub, shutdown_event, RACE_ENGINEER_CONTROL_TOPIC),
+        raceEngineerControlTask(
+            race_engineer_control_pub,
+            shutdown_event,
+            RACE_ENGINEER_CONTROL_TOPIC),
         name="Race Engineer Control Bridge Task"))
     tasks.append(asyncio.create_task(
-        raceEngineerControlTask(ipc_pub, shutdown_event, RACE_ENGINEER_PTT_CONTROL_TOPIC),
+        raceEngineerControlTask(
+            race_engineer_control_pub,
+            shutdown_event,
+            RACE_ENGINEER_PTT_CONTROL_TOPIC),
         name="Race Engineer Push-to-Talk Bridge Task"))
 
     registerIpcTask(run_ipc_server, logger, session_state, telemetry_handler, ipc_pub, dealer, web_server, tasks)
