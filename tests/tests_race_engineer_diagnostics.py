@@ -28,6 +28,7 @@ from lib.race_engineer import (
     RaceEngineerLaunchProfile,
     diagnose_race_engineer_launch_profile,
     format_race_engineer_profile_diagnostics,
+    race_engineer_profile_diagnostic_next_steps,
     race_engineer_profile_has_errors,
 )
 
@@ -54,6 +55,36 @@ class TestRaceEngineerProfileDiagnostics(unittest.TestCase):
         self.assertEqual(_codes(diagnostics), ["azure-tts-location", "azure-tts-key-missing"])
         self.assertTrue(race_engineer_profile_has_errors(diagnostics))
         self.assertNotIn("secret", format_race_engineer_profile_diagnostics(diagnostics).lower())
+        next_steps = race_engineer_profile_diagnostic_next_steps(
+            RaceEngineerLaunchProfile(
+                voice_provider="azure",
+                azure_key_env_var="PNG_AZURE_SPEECH_KEY",
+            ),
+            diagnostics,
+        )
+        self.assertIn(
+            "PowerShell: [Environment]::SetEnvironmentVariable('PNG_AZURE_SPEECH_KEY', "
+            "'<Azure Speech key>', 'User')",
+            next_steps[0],
+        )
+        self.assertIn("https://francecentral.api.cognitive.microsoft.com/", next_steps[1])
+
+    def test_format_diagnostics_can_include_next_steps(self):
+        diagnostics = diagnose_race_engineer_launch_profile(
+            RaceEngineerLaunchProfile(
+                voice_provider="azure",
+                azure_region="",
+                azure_speech_endpoint="",
+                azure_key_env_var="PNG_AZURE_SPEECH_KEY",
+            ),
+            environ={},
+        )
+        next_steps = race_engineer_profile_diagnostic_next_steps(RaceEngineerLaunchProfile(), diagnostics)
+
+        formatted = format_race_engineer_profile_diagnostics(diagnostics, next_steps=next_steps)
+
+        self.assertIn("Next steps:", formatted)
+        self.assertIn("[Environment]::SetEnvironmentVariable('PNG_AZURE_SPEECH_KEY'", formatted)
 
     def test_azure_voice_accepts_https_endpoint_and_present_key(self):
         diagnostics = diagnose_race_engineer_launch_profile(
@@ -80,6 +111,13 @@ class TestRaceEngineerProfileDiagnostics(unittest.TestCase):
 
         self.assertEqual(_codes(diagnostics), ["ptt-external-audio"])
         self.assertFalse(race_engineer_profile_has_errors(diagnostics))
+        self.assertEqual(
+            race_engineer_profile_diagnostic_next_steps(
+                RaceEngineerLaunchProfile(push_to_talk_audio_source="external"),
+                diagnostics,
+            ),
+            ["Start the external push-to-talk audio publisher before using the wheel hold binding."],
+        )
 
     def test_windows_microphone_is_error_off_windows(self):
         diagnostics = diagnose_race_engineer_launch_profile(

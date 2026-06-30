@@ -179,7 +179,9 @@ Current implementation:
 - The settings dialog includes an offline `Check` action that validates the
   launch profile without revealing secrets or contacting Azure: it checks Azure
   location and key env-var presence, STT/PTT compatibility, Codex CLI command
-  configuration, prompt file paths, and UDP action conflicts.
+  configuration, prompt file paths, and UDP action conflicts. It shows the same
+  diagnostic next-step hints as `Preflight`, including persistent User-scope
+  Azure key setup.
 - The same settings dialog includes a `Voice Test` action that runs
   `--profile-voice-test` from the current form values through a temporary
   profile, so Azure TTS can be verified before saving or starting telemetry.

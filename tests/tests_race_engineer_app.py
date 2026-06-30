@@ -772,7 +772,7 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertTrue(summary["question"]["skipped"])
         codes = {item["code"] for item in summary["diagnostics"]}
         self.assertIn("conversation-http-endpoint-missing", codes)
-        self.assertIn("Fix the conversation provider settings, then run Question Test.", summary["next_steps"])
+        self.assertIn("Fix the HTTP answer provider URL, then run Question Test.", summary["next_steps"])
 
     def test_run_profile_preflight_reports_load_failure_next_step(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

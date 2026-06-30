@@ -77,6 +77,7 @@ from lib.race_engineer import (
     format_race_engineer_profile_diagnostics,
     load_race_engineer_launch_profile,
     load_agent_prompt_overrides,
+    race_engineer_profile_diagnostic_next_steps,
     race_engineer_launch_profile_to_cli_args,
     race_engineer_profile_has_errors,
     sample_from_trace_update,
@@ -1779,25 +1780,7 @@ def _preflight_next_steps(
     """Build short post-preflight actions for launcher users."""
 
     steps: List[str] = []
-    diagnostic_codes = {item.code for item in diagnostics}
-    if diagnostic_codes:
-        if any(code in diagnostic_codes for code in ("azure-tts-key-missing", "azure-stt-key-missing")):
-            steps.append(_azure_key_next_step(profile.azure_key_env_var))
-        if any(code in diagnostic_codes for code in ("azure-tts-location", "azure-stt-location")):
-            steps.append(
-                "Paste the Azure endpoint in the Voice tab or set PNG_AZURE_SPEECH_ENDPOINT, "
-                "for example https://francecentral.api.cognitive.microsoft.com/."
-            )
-        if any(code.startswith("conversation-") for code in diagnostic_codes):
-            steps.append("Fix the conversation provider settings, then run Question Test.")
-        if "agent-prompts-file-missing" in diagnostic_codes:
-            steps.append("Create or choose an agent prompts JSON file, then rerun Check.")
-        if "udp-action-conflict" in diagnostic_codes:
-            steps.append("Use different UDP action codes for toggle and push-to-talk.")
-        if "ptt-speech-recognition-disabled" in diagnostic_codes:
-            steps.append("Enable Azure speech recognition or clear the push-to-talk UDP action binding.")
-        if "ptt-windows-microphone-platform" in diagnostic_codes:
-            steps.append("Use Windows microphone capture only on Windows, or switch push-to-talk audio to external.")
+    steps.extend(race_engineer_profile_diagnostic_next_steps(profile, diagnostics))
 
     if not voice_payload.get("ok", False) and not voice_payload.get("skipped", False):
         steps.append("Run Voice Test again after fixing Azure voice settings.")
@@ -1815,14 +1798,6 @@ def _preflight_next_steps(
         steps.append("Start the launcher stack, enable Race Engineer, then drive one out lap to populate live telemetry.")
 
     return _dedupe_next_steps(steps)
-
-
-def _azure_key_next_step(env_var_name: str) -> str:
-    name = str(env_var_name or DEFAULT_AZURE_SPEECH_KEY_ENV_VAR).strip() or DEFAULT_AZURE_SPEECH_KEY_ENV_VAR
-    return (
-        f"Set {name} as a User environment variable so the launcher can read it, then restart the launcher. "
-        f"PowerShell: [Environment]::SetEnvironmentVariable('{name}', '<Azure Speech key>', 'User')"
-    )
 
 
 def _dedupe_next_steps(steps: List[str]) -> List[str]:

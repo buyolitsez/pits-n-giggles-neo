@@ -64,6 +64,7 @@ from lib.race_engineer import (
     RaceEngineerLaunchProfile,
     diagnose_race_engineer_launch_profile,
     format_race_engineer_profile_diagnostics,
+    race_engineer_profile_diagnostic_next_steps,
     race_engineer_profile_has_errors,
     save_agent_prompt_override_template,
     save_race_engineer_launch_profile,
@@ -426,8 +427,12 @@ class RaceEngineerSettingsDialog(QDialog):
         self.accept()
 
     def _on_check(self) -> None:
-        diagnostics = diagnose_race_engineer_launch_profile(self._profile_from_widgets())
-        message = format_race_engineer_profile_diagnostics(diagnostics)
+        profile = self._profile_from_widgets()
+        diagnostics = diagnose_race_engineer_launch_profile(profile)
+        message = format_race_engineer_profile_diagnostics(
+            diagnostics,
+            next_steps=race_engineer_profile_diagnostic_next_steps(profile, diagnostics),
+        )
         if race_engineer_profile_has_errors(diagnostics):
             QMessageBox.warning(self, "Race Engineer Check", message)
         else:

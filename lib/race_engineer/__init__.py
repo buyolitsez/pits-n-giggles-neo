@@ -92,6 +92,7 @@ from .diagnostics import (
     RaceEngineerProfileDiagnostic,
     diagnose_race_engineer_launch_profile,
     format_race_engineer_profile_diagnostics,
+    race_engineer_profile_diagnostic_next_steps,
     race_engineer_profile_has_errors,
 )
 from .history import LapRecord, RaceEngineerHistory
@@ -256,6 +257,7 @@ __all__ = [
     "race_engineer_launcher_status_from_stats",
     "race_engineer_launcher_status_is_attention",
     "race_engineer_profile_udp_action_code",
+    "race_engineer_profile_diagnostic_next_steps",
     "race_engineer_profile_has_errors",
     "race_engineer_push_to_talk_message",
     "race_engineer_profile_udp_action_codes",

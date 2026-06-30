@@ -79,15 +79,23 @@ def diagnose_race_engineer_launch_profile(
 
 def format_race_engineer_profile_diagnostics(
     diagnostics: list[RaceEngineerProfileDiagnostic],
+    *,
+    next_steps: Optional[list[str]] = None,
 ) -> str:
     """Format diagnostics for a launcher message box."""
 
+    clean_steps = _dedupe_next_steps(next_steps or [])
     if not diagnostics:
-        return "Race Engineer profile looks ready."
+        lines = ["Race Engineer profile looks ready."]
+        if clean_steps:
+            lines.extend(["", "Next steps:", *[f"- {step}" for step in clean_steps]])
+        return "\n".join(lines)
     lines = []
     for item in diagnostics:
         label = "Error" if item.severity == "error" else "Warning"
         lines.append(f"{label}: {item.message}")
+    if clean_steps:
+        lines.extend(["", "Next steps:", *[f"- {step}" for step in clean_steps]])
     return "\n".join(lines)
 
 
@@ -95,6 +103,40 @@ def race_engineer_profile_has_errors(diagnostics: list[RaceEngineerProfileDiagno
     """Return True if diagnostics contain blocking setup errors."""
 
     return any(item.severity == "error" for item in diagnostics)
+
+
+def race_engineer_profile_diagnostic_next_steps(
+    profile: RaceEngineerLaunchProfile,
+    diagnostics: list[RaceEngineerProfileDiagnostic],
+) -> list[str]:
+    """Return short setup actions for offline profile diagnostics."""
+
+    codes = {item.code for item in diagnostics}
+    steps: list[str] = []
+    if any(code in codes for code in ("azure-tts-key-missing", "azure-stt-key-missing")):
+        steps.append(_azure_key_next_step(profile.azure_key_env_var))
+    if any(code in codes for code in ("azure-tts-location", "azure-stt-location")):
+        steps.append(
+            "Paste the Azure endpoint in the Voice tab or set PNG_AZURE_SPEECH_ENDPOINT, "
+            "for example https://francecentral.api.cognitive.microsoft.com/."
+        )
+    if "conversation-http-endpoint-missing" in codes or "conversation-http-endpoint-invalid" in codes:
+        steps.append("Fix the HTTP answer provider URL, then run Question Test.")
+    if "conversation-command-missing" in codes:
+        steps.append("Set the Codex CLI command in the Questions tab, then run Question Test.")
+    if "conversation-command-not-found" in codes:
+        steps.append("Install the conversation command executable or fix the CLI command path.")
+    if "agent-prompts-file-missing" in codes:
+        steps.append("Create or choose an agent prompts JSON file, then rerun Check.")
+    if "udp-action-conflict" in codes:
+        steps.append("Use different UDP action codes for toggle and push-to-talk.")
+    if "ptt-speech-recognition-disabled" in codes:
+        steps.append("Enable Azure speech recognition or clear the push-to-talk UDP action binding.")
+    if "ptt-windows-microphone-platform" in codes:
+        steps.append("Use Windows microphone capture only on Windows, or switch push-to-talk audio to external.")
+    if "ptt-external-audio" in codes:
+        steps.append("Start the external push-to-talk audio publisher before using the wheel hold binding.")
+    return _dedupe_next_steps(steps)
 
 
 def _check_azure_voice(
@@ -275,3 +317,25 @@ def _command_exists(executable: str) -> bool:
 
 def _path_exists(path: str) -> bool:
     return Path(path).exists()
+
+
+def _azure_key_next_step(env_var_name: str) -> str:
+    name = str(env_var_name or RaceEngineerLaunchProfile().azure_key_env_var).strip()
+    if not name:
+        name = RaceEngineerLaunchProfile().azure_key_env_var
+    return (
+        f"Set {name} as a User environment variable so the launcher can read it, then restart the launcher. "
+        f"PowerShell: [Environment]::SetEnvironmentVariable('{name}', '<Azure Speech key>', 'User')"
+    )
+
+
+def _dedupe_next_steps(steps: list[str]) -> list[str]:
+    seen = set()
+    result: list[str] = []
+    for step in steps:
+        text = str(step or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
