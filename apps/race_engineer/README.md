@@ -261,8 +261,9 @@ while the push-to-talk control is active.
 When the engineer is muted, push-to-talk does not start recording and audio
 questions do not call Azure STT; the app speaks a short muted status instead.
 
-UDP action bindings saved in the launcher profile are read by the backend at
-startup. Restart the backend after changing the wheel-button bindings.
+UDP action bindings saved in the launcher profile are sent to a running backend
+when you press Save. If the backend is stopped, it reads them next time it
+starts.
 In the launcher Controls tab, leave the UDP action fields empty for unbound, or
 type a number from `1` to `12` matching the UDP Action bound in the F1 game.
 If a push-to-talk UDP action is bound, `Check` and `Preflight` require speech

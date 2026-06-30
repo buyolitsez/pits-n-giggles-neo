@@ -438,9 +438,10 @@ Current implementation:
   local default Windows microphone. The default `external` mode keeps the app
   ready for a separate wheel/launcher/audio feeder without opening a microphone.
 - The launcher profile can bind one UDP action code to toggle the engineer and
-  one hold action code to push-to-talk. The backend reads these sidecar bindings
-  at startup and ignores a profile binding if it conflicts with an existing HUD
-  UDP action code.
+  one hold action code to push-to-talk. Save applies those sidecar bindings to a
+  running backend; otherwise the backend reads them at next start. The backend
+  ignores a profile binding if it conflicts with an existing HUD UDP action
+  code.
 - In the launcher Controls tab, UDP action bindings are plain text fields:
   empty means unbound, and `1` through `12` map to the F1 game's UDP Action
   numbers.

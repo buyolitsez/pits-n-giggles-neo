@@ -24,8 +24,9 @@
 
 import threading
 from dataclasses import replace
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
+from pydantic import BaseModel
 from PySide6.QtWidgets import QInputDialog, QPushButton
 
 from lib.config import PngSettings
@@ -33,9 +34,12 @@ from lib.ipc import IpcClientSync
 from lib.race_engineer import (
     RACE_ENGINEER_FAST_LIVE_COMMAND_TIMEOUT_MS,
     RaceEngineerLaunchProfile,
+    RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD,
+    RACE_ENGINEER_TOGGLE_ACTION_FIELD,
     default_race_engineer_launch_profile_path,
     load_race_engineer_launch_profile,
     race_engineer_launch_profile_to_cli_args,
+    race_engineer_profile_udp_action_code,
     race_engineer_launcher_status_from_stats,
     race_engineer_live_question_timeout_ms,
 )
@@ -167,10 +171,10 @@ class RaceEngineerAppMgr(PngAppMgrBase):
         if dialog.exec():
             self.profile = dialog.profile
             self._reload_profile_args()
-            message = (
-                "Race Engineer settings saved. Restart Race Engineer to apply launch options. "
-                "Restart the backend to apply UDP action bindings."
-            )
+            udp_status = self._apply_udp_action_bindings_to_backend(self.profile)
+            message = "Race Engineer settings saved. Restart Race Engineer to apply launch options."
+            if udp_status:
+                message = f"{message}\n{udp_status}"
             self.show_success("Race Engineer Settings", message)
 
     def toggle_enabled_callback(self) -> None:
@@ -308,6 +312,51 @@ class RaceEngineerAppMgr(PngAppMgrBase):
 
         self._update_status(race_engineer_launcher_status_from_stats(stats))
 
+    def _apply_udp_action_bindings_to_backend(self, profile: RaceEngineerLaunchProfile) -> str:
+        backend = self._backend_manager()
+        if (
+                backend is None
+                or not getattr(backend, "is_running", False)
+                or not getattr(backend, "ipc_port", None)):
+            return "Backend is not running; UDP action bindings apply when backend starts."
+
+        existing_codes = _collect_configured_udp_action_codes(self.curr_settings)
+        conflicts: list[str] = []
+        applied: list[str] = []
+        failed: list[str] = []
+        for field_name, value in _race_engineer_udp_action_fields(profile).items():
+            value_to_send = race_engineer_profile_udp_action_code(
+                profile,
+                field_name,
+                existing_codes=existing_codes,
+            )
+            if value is not None and value_to_send is None:
+                conflicts.append(f"{field_name}={value} conflicts with {existing_codes.get(value)}")
+            try:
+                ok = backend.send_udp_action_code_change(field_name, value_to_send)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                self.error_log(f"Failed to apply Race Engineer UDP action {field_name}: {exc}")
+                ok = False
+            if ok:
+                applied.append(f"{field_name}={value_to_send if value_to_send is not None else 'Not bound'}")
+            else:
+                failed.append(field_name)
+
+        messages = []
+        if applied:
+            messages.append(f"UDP action bindings applied to running backend: {', '.join(applied)}.")
+        if conflicts:
+            messages.append(f"Conflicts ignored: {'; '.join(conflicts)}.")
+        if failed:
+            messages.append(f"Backend did not accept: {', '.join(failed)}.")
+        return "\n".join(messages)
+
+    def _backend_manager(self):
+        for subsystem in getattr(self.window, "subsystems", []):
+            if getattr(subsystem, "SHORT_NAME", "") == "CORE":
+                return subsystem
+        return None
+
 
 def build_race_engineer_manager_args(
         base_args: List[str],
@@ -319,3 +368,24 @@ def build_race_engineer_manager_args(
     if debug_mode:
         args.append("--debug")
     return args
+
+
+def _race_engineer_udp_action_fields(profile: RaceEngineerLaunchProfile) -> Dict[str, Optional[int]]:
+    return {
+        RACE_ENGINEER_TOGGLE_ACTION_FIELD: profile.race_engineer_toggle_udp_action_code,
+        RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD: profile.race_engineer_push_to_talk_udp_action_code,
+    }
+
+
+def _collect_configured_udp_action_codes(settings: PngSettings) -> Dict[int, str]:
+    result: Dict[int, str] = {}
+    for section_name, section in settings.__dict__.items():
+        if not isinstance(section, BaseModel):
+            continue
+        for field_name, field in type(section).model_fields.items():
+            if not (field.json_schema_extra or {}).get("udp_action_code"):
+                continue
+            value = getattr(section, field_name)
+            if isinstance(value, int):
+                result[value] = f"{section_name}.{field_name}"
+    return result

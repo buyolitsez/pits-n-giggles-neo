@@ -108,7 +108,7 @@ async def handleUdpActionCodeChange(
     """Handle udp action code change command"""
 
     field = msg['action_code_field']
-    action_code = msg['value']
+    action_code = msg.get('value')
     logger.info("Received udp action code change command. Field: %s, Action Code: %s", field, action_code)
     try:
         telemetry_handler.updateUdpActionCode(field, action_code)

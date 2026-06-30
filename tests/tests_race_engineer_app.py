@@ -690,7 +690,10 @@ class TestRaceEngineerAppArgs(unittest.TestCase):
         self.assertTrue(summary["push_to_talk"]["live_test_recommended"])
         self.assertFalse(summary["push_to_talk"]["live_tested"])
         self.assertIn("Run Mic PTT Test before driving to verify the real microphone path.", summary["next_steps"])
-        self.assertIn("Restart the backend after changing UDP action bindings.", summary["next_steps"])
+        self.assertIn(
+            "Save Race Engineer settings to apply UDP action bindings to a running backend.",
+            summary["next_steps"],
+        )
         payload = json.loads(print_mock.call_args_list[0].args[0])
         self.assertEqual(payload["push_to_talk"]["speech_provider"], "azure")
 

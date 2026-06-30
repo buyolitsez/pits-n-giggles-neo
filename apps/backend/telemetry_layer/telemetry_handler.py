@@ -111,7 +111,7 @@ class UdpActionCodes:
         RACE_ENGINEER_PUSH_TO_TALK_ACTION_FIELD: "race_engineer_push_to_talk",
     }
 
-    def update(self, key: str, value: int):
+    def update(self, key: str, value: Optional[int]):
         """Update the value of a UDP action code.
 
         Raises:
@@ -318,7 +318,7 @@ class F1TelemetryHandler:
         self.m_manager_task = asyncio.create_task(self.run(), name=name)
         return self.m_manager_task
 
-    def updateUdpActionCode(self, key: str, val: int) -> None:
+    def updateUdpActionCode(self, key: str, val: Optional[int]) -> None:
         """
         Update UDP action code.
 
@@ -1010,6 +1010,7 @@ class F1TelemetryHandler:
 
     async def _processRaceEngineerToggle(self) -> None:
         """Toggle race engineer callouts through the local pub/sub bridge."""
+        self.m_logger.info("Race engineer toggle UDP action received")
         await AsyncInterTaskCommunicator().send(
             RACE_ENGINEER_CONTROL_TOPIC,
             race_engineer_toggle_message(source="udp_action"),
@@ -1017,6 +1018,7 @@ class F1TelemetryHandler:
 
     async def _processRaceEngineerPushToTalkStart(self) -> None:
         """Start race engineer push-to-talk recording through the local pub/sub bridge."""
+        self.m_logger.info("Race engineer push-to-talk UDP action pressed")
         await AsyncInterTaskCommunicator().send(
             RACE_ENGINEER_PTT_CONTROL_TOPIC,
             race_engineer_push_to_talk_message("start", source="udp_action"),
@@ -1024,6 +1026,7 @@ class F1TelemetryHandler:
 
     async def _processRaceEngineerPushToTalkStop(self) -> None:
         """Stop race engineer push-to-talk recording through the local pub/sub bridge."""
+        self.m_logger.info("Race engineer push-to-talk UDP action released")
         await AsyncInterTaskCommunicator().send(
             RACE_ENGINEER_PTT_CONTROL_TOPIC,
             race_engineer_push_to_talk_message("stop", source="udp_action"),

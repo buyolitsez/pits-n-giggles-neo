@@ -1997,7 +1997,9 @@ def _preflight_next_steps(
     if push_to_talk_payload.get("external_audio_required", False):
         steps.append("Start the external push-to-talk audio publisher before using the wheel hold binding.")
     if push_to_talk_payload.get("udp_action_bound", False):
-        steps.append("Restart the backend after changing UDP action bindings.")
+        steps.append(
+            "Save Race Engineer settings to apply UDP action bindings to a running backend."
+        )
 
     if not steps:
         steps.append("Start the launcher stack, enable Race Engineer, then drive one out lap to populate live telemetry.")

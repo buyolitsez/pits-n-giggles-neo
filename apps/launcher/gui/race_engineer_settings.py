@@ -336,7 +336,7 @@ class RaceEngineerSettingsDialog(QDialog):
         form.addRow("Toggle engineer UDP action", self.race_engineer_toggle_udp_action_code)
         form.addRow("Push-to-talk UDP action", self.race_engineer_push_to_talk_udp_action_code)
         note = QLabel(
-            "Leave empty for Not bound. Enter a UDP Action number from 1 to 12, then restart the backend."
+            "Leave empty for Not bound. Enter a UDP Action number from 1 to 12; Save applies it to the backend."
         )
         note.setWordWrap(True)
         note.setStyleSheet("color: #9cdcfe; background-color: transparent;")

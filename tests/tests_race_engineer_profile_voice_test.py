@@ -287,7 +287,7 @@ RuntimeError: Azure Speech request failed with HTTP 400
             },
             "next_steps": [
                 "Run Mic PTT Test before driving to verify the real microphone path.",
-                "Restart the backend after changing UDP action bindings.",
+                "Save Race Engineer settings to apply UDP action bindings to a running backend.",
             ],
         })
 
@@ -301,7 +301,10 @@ RuntimeError: Azure Speech request failed with HTTP 400
         self.assertIn("Fuel is tight.", formatted)
         self.assertIn("Next steps:", formatted)
         self.assertIn("- Run Mic PTT Test before driving to verify the real microphone path.", formatted)
-        self.assertIn("- Restart the backend after changing UDP action bindings.", formatted)
+        self.assertIn(
+            "- Save Race Engineer settings to apply UDP action bindings to a running backend.",
+            formatted,
+        )
 
     def test_format_profile_preflight_output_reports_diagnostics_and_skips(self):
         output = json.dumps({
